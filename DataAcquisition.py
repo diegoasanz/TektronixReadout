@@ -8,32 +8,26 @@ import progressbar
 # from TektronixReadout import TektronixReadout
 
 class DataAcquisition:
-	def __init__(self, tektronixReadout=None):
-		self.tektRO = tektronixReadout
-		self.verb = self.tektRO.verb
-		self.inst = None if self.tektRO is None else self.tektRO.inst
-		self.doCont = None if self.tektRO is None else self.tektRO.doCont
-		self.doWaves = None if self.tektRO is None else self.tektRO.doWaves
-		self.meas = 0 if self.tektRO is None else int(self.tektRO.meas)
-		self.nrpt = 0 if self.tektRO is None else self.tektRO.nrpt
-		self.xzero = 0 if self.tektRO is None else self.tektRO.xzero
-		self.xincr = 0 if self.tektRO is None else self.tektRO.xincr
-		self.xunit = '' if self.tektRO is None else self.tektRO.xunit
-		self.yzero = 0 if self.tektRO is None else self.tektRO.yzero
-		self.ymult = 0 if self.tektRO is None else self.tektRO.ymult
-		self.yoffs = 0 if self.tektRO is None else self.tektRO.yoffs
-		self.yunit = '' if self.tektRO is None else self.tektRO.yunit
-		self.ped = None if self.tektRO is None else self.tektRO.ped
-		self.prev_meas = None
-		self.ped_points = 90
+	def __init__(self, tektronixReadout=None, verbose=False):
+		self.verb = verbose
+		self.tektronixRO = tektronixReadout
+		self.inst = None if self.tektronixRO == None else self.tektronixRO.inst
+		self.doCont = None if self.tektronixRO == None else self.tektronixRO.doCont
+		self.doWaves = None if self.tektronixRO == None else self.tektronixRO.doWaves
 
 		self.bindata = None
 		self.volts, self.time, self.peak_val, self.peak_pos = None, None, None, None
 		self.peak_values = np.empty(0, 'f')
-		self.signals = np.empty(0, 'f')
 		self.peak_times = np.empty(0, 'f')
-		self.ped_values = np.empty(0, 'f')
-		self.ped_th = 1
+		# self.peak_val2 = None
+		# self.peak_values_waves = np.empty(0,'f')
+		# self.peak_values_measu = np.empty(0,'f')
+
+	def SetInstrument(self, ipn):
+		self.tektronixRO = TektronixReadout(verb=self.verb)
+		self.inst = self.tektronixRO.inst
+		self.doCont = self.tektronixRO.doCont
+		self.doWaves = self.tektronixRO.doWaves
 
 	def WaitForSRQ(self):
 		self.inst.write('ACQuire:STATE OFF')
@@ -72,25 +66,20 @@ class DataAcquisition:
 		self.peak_val = float(self.volts[pos_max])
 		self.peak_pos = float(self.time[pos_max])
 
+	# def ReadBothData(self):
+	# 	self.inst.write('HEADer 0')
+	# 	self.WaitForSRQ()
+	# 	self.bindata = self.inst.query_binary_values('CURVE?', datatype='H', is_big_endian=False, container=np.array)
+	# 	self.peak_val2 = float(self.inst.ask('MEASUrement:IMMed:VALue?'))
+
 	def ValidateMeasuredData(self):
-		if self.ped is not None:
-			return self.peak_val > self.ped['sigma'] * self.ped_th
-		else:
-			if self.prev_meas is None:
-				self.prev_meas = self.volts
-			else:
-				if not (self.prev_meas == self.volts).all():
-					self.prev_meas = self.volts
-					return True
-				else:
-					return False
+		return self.peak_val > 0
 
 	def DoMeasurement(self):
 		if self.doWaves:
 			self.ReadData()
 			self.FormatData()
-			if self.ped is not None:
-				self.GetMaximum()
+			self.GetMaximum()
 		else:
 			self.ReadMeasurementFromDevice()
 		if self.verb:
@@ -116,15 +105,50 @@ class DataAcquisition:
 			while not valid:
 				self.DoMeasurement()
 				valid = self.ValidateMeasuredData()
-			if self.ped is not None:
-				self.peak_values = np.append(self.peak_values, self.peak_val)
-				self.peak_times = np.append(self.peak_times, self.peak_pos)
-			else:
-				self.ped_values = np.append(self.ped_values, self.volts)
+			self.peak_values = np.append(self.peak_values, self.peak_val)
+			self.peak_times = np.append(self.peak_times, self.peak_pos)
 			bar.update(iter+1)
 		t1 = time.time()
 		bar.finish()
 		print 'Total time:', str(t1-t0), 's'
 
+	# def TakeBothMeasurements(self):
+	# 	if self.doCont:
+	# 		print 'Can\'t do in continuous mode. Run without -c'
+	# 		return
+	# 	t0 = time.time()
+	# 	for iter in xrange(self.meas):
+	# 		self.ReadBothData()
+	# 		self.FormatData()
+	# 		self.GetMaximum()
+	# 		self.peak_values_waves = np.append(self.peak_values_waves, self.peak_val)
+	# 		self.peak_values_measu = np.append(self.peak_values_measu, self.peak_val2)
+	# 	t1 = time.time()
+	# 	print 'Total time:', str(t1-t0), 's'
+
+	def SaveMeasurements(self):
+		if not os.path.isdir('{dir}/Runs'.format(dir=self.outdir)):
+			os.makedirs('{dir}/Runs'.format(dir=self.outdir))
+		string1 = '{dir}/Runs/data_{f}'.format(dir=self.outdir, f=self.filename)
+		string1 += '_Waves' if self.doWaves else '_Measure'
+		string1 += '_Continuous' if self.doCont else '_SingleEvts'
+		string1 += '.csv'
+		np.savetxt(string1, self.peak_values, delimiter=';')
+		string2 = '{dir}/Runs/point_{f}'.format(dir=self.outdir, f=self.filename)
+		string2 += '_Waves' if self.doWaves else '_Measure'
+		string2 += '_Continuous' if self.doCont else '_SingleEvts'
+		string2 += '.csv'
+		filep = open(string2, 'w')
+		filep.write('{m:.4}'.format(m=self.peak_values.mean(0, 'f')))
+		filep.write('{s:.4}'.format(s=self.peak_values.std(0, 'f')))
+		filep.close()
+
+	def Quit(self):
+		self.inst.before_close()
+		self.inst.close()
+		# sys.exit(0)
+		exit()
+
+
 if __name__ == '__main__':
-	z = DataAcquisition(None)
+	z = DataAcquisition(None, True)
