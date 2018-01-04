@@ -148,7 +148,7 @@ class CalibrationAnalysis:
 		# 	                 -0.0200: 'waves_Calibration_Neg_20.0mV.csv',
 		# 	                 -0.01589: 'waves_Calibration_Neg_15.89mV.csv',
 		# 	                 -0.01262: 'waves_Calibration_Neg_12.62mV.csv',
-		# 	                 -0.01002: 'waves_Calibration_Neg_10.02mV.csv',
+		# 	                 -0.01002: 'waves_Calibration_Neg_10.02mV.csv', TODO AQUI ESTAMOS
 		# 	                 -0.007962: 'waves_Calibration_Neg_7.962mV.csv',
 		#   4000
 		# 	                 -0.006325: 'waves_Calibration_Neg_6.325mV.csv',
