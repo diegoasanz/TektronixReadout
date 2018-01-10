@@ -80,7 +80,7 @@ class CalibrationRunsCAEN:
 						self.vme_b_addr = parser.getint('OPTILINK', 'vme_base_address')
 				if parser.has_section('RUN'):
 					if parser.has_option('RUN', 'signal_channel') and self.sigCh == -1:
-						self.sigCh = parser.getint('OPTILINK', 'signal_channel')
+						self.sigCh = parser.getint('RUN', 'signal_channel')
 					if parser.has_option('RUN', 'trig_channel') and self.trigCh == -1:
 						self.trigCh = parser.getint('RUN', 'trig_channel')
 					if parser.has_option('RUN', 'trig_val'):
