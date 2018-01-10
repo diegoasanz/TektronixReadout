@@ -19,6 +19,7 @@ import ipdb
 class CalibrationAnalysis:
 	def __init__(self, outputDir, inputfile, bias, verbose):
 		ro.gErrorIgnoreLevel = ro.kError
+		# self.
 		self.time0 = time.time()
 		self.outDir, self.inputFile, self.vcal, self.verb = outputDir, inputfile, bias, verbose
 		self.ptsWaveOutput, self.eventOutput, self.eventsOutput = 0, np.zeros(1, 'I'), 0

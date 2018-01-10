@@ -145,6 +145,7 @@ class CalibrationRunsCAEN:
 		t0 = time.time() - t0
 		print 'Total time saving {m} events:'.format(m=self.meas), t0, 'seconds'
 		self.CreateRootFile()
+		self.MoveBinaryFiles()
 
 	def Delay(self, ti=1.0):
 		t0 = time.time()
@@ -249,6 +250,12 @@ class CalibrationRunsCAEN:
 		ft.close()
 		t0 = time.time() - t0
 		print 'Time creating root tree:', t0, 'seconds'
+
+	def MoveBinaryFiles(self):
+		print 'Moving binary files... ', ; sys.stdout.flush()
+		shutil.move('wave{chs}.dat'.format(chs=self.sigCh), '{d}/Runs/{f}_signal.dat'.format(d=self.outdir, f=self.filename))
+		shutil.move('wave{cht}.dat'.format(cht=self.trigCh), '{d}/Runs/{f}_trigger.dat'.format(d=self.outdir, f=self.filename))
+		print 'Done'
 
 	def CreateProgressBar(self, maxVal=1):
 		widgets = [
