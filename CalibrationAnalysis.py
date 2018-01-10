@@ -76,14 +76,14 @@ class CalibrationAnalysis:
 			self.pedCal1[self.vcal], self.pedCal2[self.vcal], self.pedCal3[self.vcal], self.pedCal4[self.vcal] = np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
 			self.calVoltsReal1[self.vcal], self.calVoltsReal2[self.vcal], self.calVoltsReal3[self.vcal], self.calVoltsReal4[self.vcal] = np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
 			self.calVoltsRealSigma1[self.vcal], self.calVoltsRealSigma2[self.vcal], self.calVoltsRealSigma3[self.vcal], self.calVoltsRealSigma4[self.vcal] = np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
-			self.rawInputTreeNames[self.vcal] = 'raw_in_tree_cal_pos_{b}mV_waves'.format(b=abs(self.vcal * 1000)) if self.vcal >= 0 else 'raw_in_tree_cal_neg_{b}mV_waves'.format(b=abs(self.vcal * 1000))
-			self.rawOutputTreeNames[self.vcal] = 'raw_out_tree_cal_pos_{b}mV_waves'.format(b=abs(self.vcal * 1000)) if self.vcal >= 0 else 'raw_out_tree_cal_neg_{b}mV_waves'.format(b=abs(self.vcal * 1000))
+			self.runInputFiles[self.vcal] = self.runInputFiles[self.vcal] + '.csv'
+			self.runOutputFiles[self.vcal] = self.runOutputFiles[self.vcal] + '.csv'
 			self.ConvertFiles()
 		self.time1 = time.time()
 		tempt = self.time1 - self.time0
 		print 'Time taken to load and prepare all files:', tempt, 'seconds'
 
-#   TODO: MAKE IT DO IT FROM A TEXT FILE OR A JSON!!!!
+#   TODO: MAKE IT DO IT FROM A TEXT FILE!!!!
 	def ReadInputFile(self):
 
 		parser = ConfigParser.ConfigParser()
@@ -100,11 +100,11 @@ class CalibrationAnalysis:
 				self.calVolts = np.array([np.double(calVoltsString[i]) for i in xrange(len(calVoltsString))], 'f8')
 
 		self.runFilesDir = self.outDir
-		self.inputPrefix = 'waves_Calibration_Input_'
-		self.inputSuffix = 'mV.csv'
+		self.inputPrefix = 'waves_Calibration_Input'
+		self.inputSuffix = ''
 
-		self.outputPrefix = 'waves_Calibration_Output_'
-		self.outputSuffix = 'mV.csv'
+		self.outputPrefix = 'waves_Calibration_Output'
+		self.outputSuffix = ''
 
 		if parser.has_section('INPUT'):
 			if parser.has_option('INPUT', 'inputFilesDir'):
@@ -126,15 +126,15 @@ class CalibrationAnalysis:
 
 		for val in self.calVolts:
 			if val >= 0:
-				self.runInputFiles[val] = '{p}Pos_{v}{s}'.format(p=self.inputPrefix, v=abs(1000*val), s=self.inputSuffix)
-				self.runOutputFiles[val] = '{p}Pos_{v}{s}'.format(p=self.outputPrefix, v=abs(1000*val), s=self.outputSuffix)
+				self.rawInputTreeNames[val] = '{p}_Pos_{v}{s}'.format(p=self.inputPrefix, v=abs(1000*val), s=self.inputSuffix)
+				self.rawOutputTreeNames[val] = '{p}_Pos_{v}{s}'.format(p=self.outputPrefix, v=abs(1000*val), s=self.outputSuffix)
 			else:
-				self.runInputFiles[val] = '{p}Neg_{v}{s}'.format(p=self.inputPrefix, v=abs(1000*val), s=self.inputSuffix)
-				self.runOutputFiles[val] = '{p}Neg_{v}{s}'.format(p=self.outputPrefix, v=abs(1000*val), s=self.outputSuffix)
+				self.rawInputTreeNames[val] = '{p}_Neg_{v}{s}'.format(p=self.inputPrefix, v=abs(1000*val), s=self.inputSuffix)
+				self.rawOutputTreeNames[val] = '{p}_Neg_{v}{s}'.format(p=self.outputPrefix, v=abs(1000*val), s=self.outputSuffix)
 
 		# self.runFiles = {val: '{p}{v:.1f}{s}'.format(p=self.inputPrefix, v=val*1000, s=self.inputSuffix) if abs(val) >= 0.1 else '{p}{v:.1f}{s}'.format(p=self.inputPrefix, v=val, s=self.inputSuffix) for val in self.calVolts}
 		#
-		#   500
+		#   5000
 		# 	self.runFiles = {-2: 'waves_Calibration_Neg_2000.0mV.csv',
 		# 	                 -1.589: 'waves_Calibration_Neg_1589.0mV.csv',
 		# 	                 -1.262: 'waves_Calibration_Neg_1262.0mV.csv',
@@ -145,48 +145,48 @@ class CalibrationAnalysis:
 		# 	                 -0.3991: 'waves_Calibration_Neg_399.1mV.csv',
 		# 	                 -0.3170: 'waves_Calibration_Neg_317.0mV.csv',
 		# 	                 -0.2518: 'waves_Calibration_Neg_251.8mV.csv',
-		#   1000
+		#   6000
 		# 	                 -0.2000: 'waves_Calibration_Neg_200.0mV.csv',
 		# 	                 -0.1589: 'waves_Calibration_Neg_158.9mV.csv',
 		# 	                 -0.1262: 'waves_Calibration_Neg_126.2mV.csv',
 		# 	                 -0.1002: 'waves_Calibration_Neg_100.2mV.csv',
 		# 	                 -0.07962: 'waves_Calibration_Neg_79.62mV.csv',
-		#   2000
+		#   7000
 		# 	                 -0.06325: 'waves_Calibration_Neg_63.25mV.csv',
 		# 	                 -0.05024: 'waves_Calibration_Neg_50.24mV.csv',
-		# 	                 -0.03991: 'waves_Calibration_Neg_39.91mV.csv',
+		# 	                 -0.03991: 'waves_Calibration_Neg_39.91mV.csv',  TODO poner atenuador de 20dB
 		# 	                 -0.0317: 'waves_Calibration_Neg_31.7mV.csv',
 		# 	                 -0.02518: 'waves_Calibration_Neg_25.18mV.csv',
-		#   3000
+		#   8000
 		# 	                 -0.0200: 'waves_Calibration_Neg_20.0mV.csv',
 		# 	                 -0.01589: 'waves_Calibration_Neg_15.89mV.csv',
 		# 	                 -0.01262: 'waves_Calibration_Neg_12.62mV.csv',
 		# 	                 -0.01002: 'waves_Calibration_Neg_10.02mV.csv',
 		# 	                 -0.007962: 'waves_Calibration_Neg_7.962mV.csv',
-		#   4000
+		#   10000
 		# 	                 -0.006325: 'waves_Calibration_Neg_6.325mV.csv',
 		# 	                 -0.005024: 'waves_Calibration_Neg_5.024mV.csv',
 		# 	                 0.005024: 'waves_Calibration_Pos_5.024mV.csv',
 		# 	                 0.006325: 'waves_Calibration_Pos_6.325mV.csv',
-		#   3000
+		#   8000
 		# 	                 0.007962: 'waves_Calibration_Pos_7.962mV.csv',
 		# 	                 0.01002: 'waves_Calibration_Pos_10.02mV.csv',
 		# 	                 0.01262: 'waves_Calibration_Pos_12.62mV.csv',
 		# 	                 0.01589: 'waves_Calibration_Pos_15.89mV.csv',
 		# 	                 0.0200: 'waves_Calibration_Pos_20.0mV.csv',
-		#   2000                                                            TODO AQUI ESTAMOS
+		#   7000
 		# 	                 0.02518: 'waves_Calibration_Pos_25.18mV.csv',
 		# 	                 0.0317: 'waves_Calibration_Pos_31.7mV.csv',
 		# 	                 0.03991: 'waves_Calibration_Pos_39.91mV.csv',
 		# 	                 0.05024: 'waves_Calibration_Pos_50.24mV.csv',  TODO quitar atenuador 20db
 		# 	                 0.06325: 'waves_Calibration_Pos_63.25mV.csv',
-		#   1000
+		#   6000
 		# 	                 0.07962: 'waves_Calibration_Pos_79.62mV.csv',
 		# 	                 0.1002: 'waves_Calibration_Pos_100.2mV.csv',
 		# 	                 0.1262: 'waves_Calibration_Pos_126.2mV.csv',
 		# 	                 0.1589: 'waves_Calibration_Pos_158.9mV.csv',
 		# 	                 0.2000: 'waves_Calibration_Pos_200.0mV.csv',
-		#   500
+		#   5000
 		# 	                 0.2518: 'waves_Calibration_Pos_251.8mV.csv',
 		# 	                 0.3170: 'waves_Calibration_Pos_317.0mV.csv',
 		# 	                 0.3991: 'waves_Calibration_Pos_399.1mV.csv',
@@ -198,13 +198,13 @@ class CalibrationAnalysis:
 		# 	                 1.589: 'waves_Calibration_Pos_1589.0mV.csv',
 		# 	                 2: 'waves_Calibration_Pos_2000.0mV.csv'}
 
-		self.calVoltsReal = {-2: -1.990, -1.589: -1.599, -1.262: -1.285, -1.002: -1.016, -0.7962: -8.101E-01, -0.6325: -6.393E-01, -0.5024: -5.078E-01, -0.3991: -4.021E-01, -0.3170: -3.232E-01,
-		                     -0.2518: -2.570E-01, -0.2000: -2.031E-01, -0.1589: -1.609E-01, -0.1262: -1.297E-01, -0.1002: -1.024E-01, -0.07962: -8.142E-02, -0.06325: -6.491E-02, -0.05024: -5.122E-02,
-		                     -0.03991: -4.142E-02, -0.0317: -3.290E-02, -0.02518: -2.608E-02, -0.0200: -2.065E-02, -0.01589: -1.643E-02, -0.01262: -1.293E-02, -0.01002: -1.025E-02,
-		                     -0.007962: -8.155E-03, -0.006325: -6.510E-03, -0.005024: -5.152E-03, 0.005024: 4.883E-03, 0.006325: 6.238E-03, 0.007962: 7.883E-03, 0.01002: 1.020E-02, 0.01262: 1.284E-02,
-		                     0.01589: 1.622E-02, 0.0200: 2.053E-02, 0.02518: 2.590E-02, 0.0317: 3.282E-02, 0.03991: 4.126E-02, 0.05024: 5.027E-02, 0.06325: 6.376E-02, 0.07962: 8.078E-02,
-		                     0.1002: 1.009E-01, 0.1262: 1.272E-01, 0.1589: 1.599E-01, 0.2000: 2.017E-01, 0.2518: 2.530E-01, 0.3170: 3.191E-01, 0.3991: 4.020E-01, 0.5024: 5.106E-01, 0.6325: 6.331E-01,
-		                     0.7962: 8.081E-01, 1.002: 1.012, 1.262: 1.280, 1.589: 1.599, 2: 1.996}
+		# self.calVoltsReal = {-2: -1.990, -1.589: -1.599, -1.262: -1.285, -1.002: -1.016, -0.7962: -8.101E-01, -0.6325: -6.393E-01, -0.5024: -5.078E-01, -0.3991: -4.021E-01, -0.3170: -3.232E-01,
+		#                      -0.2518: -2.570E-01, -0.2000: -2.031E-01, -0.1589: -1.609E-01, -0.1262: -1.297E-01, -0.1002: -1.024E-01, -0.07962: -8.142E-02, -0.06325: -6.491E-02, -0.05024: -5.122E-02,
+		#                      -0.03991: -4.142E-02, -0.0317: -3.290E-02, -0.02518: -2.608E-02, -0.0200: -2.065E-02, -0.01589: -1.643E-02, -0.01262: -1.293E-02, -0.01002: -1.025E-02,
+		#                      -0.007962: -8.155E-03, -0.006325: -6.510E-03, -0.005024: -5.152E-03, 0.005024: 4.883E-03, 0.006325: 6.238E-03, 0.007962: 7.883E-03, 0.01002: 1.020E-02, 0.01262: 1.284E-02,
+		#                      0.01589: 1.622E-02, 0.0200: 2.053E-02, 0.02518: 2.590E-02, 0.0317: 3.282E-02, 0.03991: 4.126E-02, 0.05024: 5.027E-02, 0.06325: 6.376E-02, 0.07962: 8.078E-02,
+		#                      0.1002: 1.009E-01, 0.1262: 1.272E-01, 0.1589: 1.599E-01, 0.2000: 2.017E-01, 0.2518: 2.530E-01, 0.3170: 3.191E-01, 0.3991: 4.020E-01, 0.5024: 5.106E-01, 0.6325: 6.331E-01,
+		#                      0.7962: 8.081E-01, 1.002: 1.012, 1.262: 1.280, 1.589: 1.599, 2: 1.996}
 
 		# self.CalculateChargeFromVcal()
 		
@@ -238,13 +238,13 @@ class CalibrationAnalysis:
 		if self.fileInputRaw is not None:
 			if self.fileInputRaw.IsOpen:
 				self.fileInputRaw.Close()
-		self.fileInputRaw = ro.TFile('{o}/{r}.root'.format(o=self.runFilesDir, r=self.rawInputTreeNames[self.vcal]), mode)
+		self.fileInputRaw = ro.TFile('{o}/Runs/{r}.root'.format(o=self.runFilesDir, r=self.rawInputTreeNames[self.vcal]), mode)
 
 	def OpenOutputFile(self, mode='READ'):
 		if self.fileOutputRaw is not None:
 			if self.fileOutputRaw.IsOpen:
 				self.fileOutputRaw.Close()
-		self.fileOutputRaw = ro.TFile('{o}/{r}.root'.format(o=self.runFilesDir, r=self.rawOutputTreeNames[self.vcal]), mode)
+		self.fileOutputRaw = ro.TFile('{o}/Runs/{r}.root'.format(o=self.runFilesDir, r=self.rawOutputTreeNames[self.vcal]), mode)
 
 	def LoadInputTreeCSV(self):
 		t0 = time.time()
@@ -329,7 +329,7 @@ class CalibrationAnalysis:
 			nameCSV = 'treeInputCSV_pos_{b}mV'.format(b=abs(self.vcal*1000)) if self.vcal >= 0 else 'treeInputCSV_neg_{b}mV'.format(b=abs(self.vcal*1000))
 			self.treeInputCSV = ro.TTree(nameCSV, nameCSV)
 			t0 = time.time()
-			self.treeInputCSV.ReadFile('{d}/{f}'.format(d=self.runFilesDir, f=self.runInputFiles[self.vcal]), 'event/I:time/D:voltage1/F:voltage2/D')
+			self.treeInputCSV.ReadFile('{d}/Runs/{f}'.format(d=self.runFilesDir, f=self.runInputFiles[self.vcal]), 'event/I:time/D:voltage1/F:voltage2/D')
 			t0 = time.time() - t0
 			self.boolInputHasTreeCSV[self.vcal] = True
 			print 'Time reading csv file:', t0, 'seconds'
@@ -352,7 +352,7 @@ class CalibrationAnalysis:
 			nameCSV = 'treeOutputCSV_pos_{b}mV'.format(b=abs(self.vcal*1000)) if self.vcal >= 0 else 'treeOutputCSV_neg_{b}mV'.format(b=abs(self.vcal*1000))
 			self.treeOutputCSV = ro.TTree(nameCSV, nameCSV)
 			t0 = time.time()
-			self.treeOutputCSV.ReadFile('{d}/{f}'.format(d=self.runFilesDir, f=self.runOutputFiles[self.vcal]), 'event/I:time/D:voltage1/F:voltage2/D')
+			self.treeOutputCSV.ReadFile('{d}/Runs/{f}'.format(d=self.runFilesDir, f=self.runOutputFiles[self.vcal]), 'event/I:time/D:voltage1/F:voltage2/D')
 			t0 = time.time() - t0
 			self.boolOutputHasTreeCSV[self.vcal] = True
 			print 'Time reading csv file:', t0, 'seconds'
@@ -1183,7 +1183,7 @@ class CalibrationAnalysis:
 
 		# TODO: use options output real or not real, and input 1, 2, 3 or 4 for considering different cases due to our ignorance...
 	def SaveCalibrations(self, suffix='', realCal=4):
-		self.fileCal = ro.TFile('calibrations_{s}.root'.format(s=suffix), 'RECREATE')
+		self.fileCal = ro.TFile('{o}/calibrations_{s}.root'.format(o=self.runFilesDir, s=suffix), 'RECREATE')
 		self.CreateVcalVSignalRegression(realCal)
 		self.CreateChargeVSignalRegression(realCal)
 		self.fileCal.Close()
@@ -1211,10 +1211,12 @@ class CalibrationAnalysis:
 		self.vCalSignalGraph.SetNameTitle(namegraph, namegraph)
 		self.vCalSignalGraph.GetXaxis().SetTitle('Vcal/V')
 		self.vCalSignalGraph.GetYaxis().SetTitle('Signal/V')
-		self.vCalSignalFit = self.vCalSignalGraph.Fit('pol1', 'QMFS')
+		fitFunc = ro.TF1('sig_vcal_fit', 'pol1', xaxis.min(), xaxis.max())
+		fitFunc.SetParameters(0.05, -0.9)
+		self.vCalSignalFit = self.vCalSignalGraph.Fit('sig_vcal_fit', 'QMFS')
 		self.fileCal.cd()
-		self.vCalSignalGraph.Write()
 		self.vCalSignalFit.Write()
+		self.vCalSignalGraph.Write()
 		self.fileCal.Write()
 
 	def CreateChargeVSignalRegression(self, realCal=4):
@@ -1230,7 +1232,9 @@ class CalibrationAnalysis:
 		self.chargeSignalGraph.SetNameTitle(namegraph, namegraph)
 		self.chargeSignalGraph.GetXaxis().SetTitle('Signal/V')
 		self.chargeSignalGraph.GetYaxis().SetTitle('Charge/e')
-		self.chargeSignalFit = self.chargeSignalGraph.Fit('pol1', 'QMFS')
+		fitFunc = ro.TF1('q_sig_fit', 'pol1', xaxis.min(), xaxis.max())
+		fitFunc.SetParameters(-50.2, -131600)
+		self.chargeSignalFit = self.chargeSignalGraph.Fit('q_sig_fit', 'QMFS')
 		self.fileCal.cd()
 		self.chargeSignalFit.Write()
 		self.chargeSignalGraph.Write()

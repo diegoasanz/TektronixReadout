@@ -76,7 +76,7 @@ class CalibrationRuns:
 			string1 += '.csv'
 			return string1
 
-		self.outString3 = '{dir}/Runs/waves_{f}'.format(dir=self.outdir, f=self.filename)
+		self.outString3 = '{dir}/Runs/{f}'.format(dir=self.outdir, f=self.filename)
 		self.outString3 = AddSuffix(self.outString3)
 
 	def Quit(self):
@@ -239,6 +239,7 @@ class CalibrationRuns:
 if __name__ == '__main__':
 	parser = OptionParser()
 	parser.add_option('-i', '--ip', dest='ip', default='169.254.2.226', type='string', help='IP address of the instrument. e.g. 192.168.1.13')
+	parser.add_option('-f', '--filename', dest='filename', default='waves_cal', help='Stem of the name for the files. e.g. waves_cal')
 	parser.add_option('-o', '--outdir', dest='outdir', default='./', type='string', help='Relative path to output directory where the Runs folder is e.g. ./')
 	parser.add_option('-s', '--signal', dest='sig', default=1, type='int', help='The channel connected to the signal. e.g. 1')
 	parser.add_option('-r', '--sigres', dest='sigres', default=0.21, type='float', help='The value of the voltage per division. No longer used e.g. 0.210')
@@ -250,6 +251,7 @@ if __name__ == '__main__':
 	parser.add_option('-v', '--verbose', dest='verb', default=False, help='Toggles verbose', action='store_true')
 	(options, args) = parser.parse_args()
 	ip = str(options.ip)
+	filename = str(options.filename)
 	outdir = str(options.outdir)
 	sig = int(options.sig)
 	sigres = float(options.sigres)
@@ -259,7 +261,6 @@ if __name__ == '__main__':
 	atten = float(options.atten)
 	calv = bool(options.calv)
 	verb = bool(options.verb)
-	filename = 'Calibration'
 	z = CalibrationRuns(ip, outdir, filename, sig, sigres, trig, meas, calv, atten, bias, verb)
 	z.SetOutputFilesNames()
 	z.fileWaves = open(z.outString3, 'wb')
