@@ -51,6 +51,7 @@ class CalibrationRunsCAEN:
 
 		self.optlink = self.node = self.vme_b_addr = 0
 		self.prefix, self.suffix = 'waves', ''
+		self.wd_path = '/usr/local/bin/wavedump'
 
 		self.ReadInputFile()
 		self.struct_fmt = '@{p}H'.format(p=self.points)  # binary files with no header. Each event has self.points samples 2 bytes each (unsigned short)
@@ -78,6 +79,8 @@ class CalibrationRunsCAEN:
 						self.node = parser.getint('OPTILINK', 'node')
 					if parser.has_option('OPTILINK', 'vme_base_address'):
 						self.vme_b_addr = parser.getint('OPTILINK', 'vme_base_address')
+					if parser.has_option('OPTILINK', 'wavedump_path'):
+						self.wd_path = parser.get('OPTILINK', 'wavedump_path')
 				if parser.has_section('RUN'):
 					if parser.has_option('RUN', 'signal_channel') and self.sigCh == -1:
 						self.sigCh = parser.getint('RUN', 'signal_channel')
@@ -131,7 +134,7 @@ class CalibrationRunsCAEN:
 		t0 = time.time()
 		self.SetupDigitiser()
 		print 'Starting getting data using wavedump...'
-		p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD_cal.txt'.format(d=self.outdir)], bufsize=1, stdin=subp.PIPE, stdout=subp.PIPE)
+		p = subp.Popen([self.wd_path, '{d}/WaveDumpConfig_CCD_cal.txt'.format(d=self.outdir)], bufsize=1, stdin=subp.PIPE, stdout=subp.PIPE)
 		t1 = time.time()
 		while p.poll() is None:
 			self.Delay(4)
@@ -187,7 +190,7 @@ class CalibrationRunsCAEN:
 
 		rfile.write('\n# configuration for each channel [0] to [7]')
 		for ch in xrange(8):
-			rfile.write('[{ch}]'.format(ch=ch))
+			rfile.write('\n[{ch}]'.format(ch=ch))
 			if ch == self.sigCh or ch == self.trigCh:
 				rfile.write('\nENABLE_INPUT\tYES')
 			else:
