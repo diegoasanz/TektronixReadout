@@ -134,7 +134,7 @@ class CalibrationAnalysis:
 
 		# self.runFiles = {val: '{p}{v:.1f}{s}'.format(p=self.inputPrefix, v=val*1000, s=self.inputSuffix) if abs(val) >= 0.1 else '{p}{v:.1f}{s}'.format(p=self.inputPrefix, v=val, s=self.inputSuffix) for val in self.calVolts}
 		#
-		#   5000
+		#   4000
 		# 	self.runFiles = {-2: 'waves_Calibration_Neg_2000.0mV.csv',
 		# 	                 -1.589: 'waves_Calibration_Neg_1589.0mV.csv',
 		# 	                 -1.262: 'waves_Calibration_Neg_1262.0mV.csv',
@@ -145,19 +145,18 @@ class CalibrationAnalysis:
 		# 	                 -0.3991: 'waves_Calibration_Neg_399.1mV.csv',
 		# 	                 -0.3170: 'waves_Calibration_Neg_317.0mV.csv',
 		# 	                 -0.2518: 'waves_Calibration_Neg_251.8mV.csv',
-		#   6000
+		#   5000
 		# 	                 -0.2000: 'waves_Calibration_Neg_200.0mV.csv',
 		# 	                 -0.1589: 'waves_Calibration_Neg_158.9mV.csv',
 		# 	                 -0.1262: 'waves_Calibration_Neg_126.2mV.csv',
 		# 	                 -0.1002: 'waves_Calibration_Neg_100.2mV.csv',
 		# 	                 -0.07962: 'waves_Calibration_Neg_79.62mV.csv',
-		#   7000
 		# 	                 -0.06325: 'waves_Calibration_Neg_63.25mV.csv',
 		# 	                 -0.05024: 'waves_Calibration_Neg_50.24mV.csv',
-		# 	                 -0.03991: 'waves_Calibration_Neg_39.91mV.csv',  TODO poner atenuador de 20dB
+		# 	                 -0.03991: 'waves_Calibration_Neg_39.91mV.csv',     TODO poner atenuador de 20dB
+		#   7000
 		# 	                 -0.0317: 'waves_Calibration_Neg_31.7mV.csv',
 		# 	                 -0.02518: 'waves_Calibration_Neg_25.18mV.csv',
-		#   8000
 		# 	                 -0.0200: 'waves_Calibration_Neg_20.0mV.csv',
 		# 	                 -0.01589: 'waves_Calibration_Neg_15.89mV.csv',
 		# 	                 -0.01262: 'waves_Calibration_Neg_12.62mV.csv',
@@ -168,25 +167,24 @@ class CalibrationAnalysis:
 		# 	                 -0.005024: 'waves_Calibration_Neg_5.024mV.csv',
 		# 	                 0.005024: 'waves_Calibration_Pos_5.024mV.csv',
 		# 	                 0.006325: 'waves_Calibration_Pos_6.325mV.csv',
-		#   8000
+		#   7000
 		# 	                 0.007962: 'waves_Calibration_Pos_7.962mV.csv',
 		# 	                 0.01002: 'waves_Calibration_Pos_10.02mV.csv',
 		# 	                 0.01262: 'waves_Calibration_Pos_12.62mV.csv',
 		# 	                 0.01589: 'waves_Calibration_Pos_15.89mV.csv',
 		# 	                 0.0200: 'waves_Calibration_Pos_20.0mV.csv',
-		#   7000
 		# 	                 0.02518: 'waves_Calibration_Pos_25.18mV.csv',
 		# 	                 0.0317: 'waves_Calibration_Pos_31.7mV.csv',
-		# 	                 0.03991: 'waves_Calibration_Pos_39.91mV.csv',
-		# 	                 0.05024: 'waves_Calibration_Pos_50.24mV.csv',  TODO quitar atenuador 20db
+		#   5000
+		# 	                 0.03991: 'waves_Calibration_Pos_39.91mV.csv',      TODO quitar atenuador 20db
+		# 	                 0.05024: 'waves_Calibration_Pos_50.24mV.csv',
 		# 	                 0.06325: 'waves_Calibration_Pos_63.25mV.csv',
-		#   6000
 		# 	                 0.07962: 'waves_Calibration_Pos_79.62mV.csv',
 		# 	                 0.1002: 'waves_Calibration_Pos_100.2mV.csv',
 		# 	                 0.1262: 'waves_Calibration_Pos_126.2mV.csv',
 		# 	                 0.1589: 'waves_Calibration_Pos_158.9mV.csv',
 		# 	                 0.2000: 'waves_Calibration_Pos_200.0mV.csv',
-		#   5000
+		#   4000
 		# 	                 0.2518: 'waves_Calibration_Pos_251.8mV.csv',
 		# 	                 0.3170: 'waves_Calibration_Pos_317.0mV.csv',
 		# 	                 0.3991: 'waves_Calibration_Pos_399.1mV.csv',
