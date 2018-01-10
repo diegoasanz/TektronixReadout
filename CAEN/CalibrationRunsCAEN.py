@@ -134,7 +134,7 @@ class CalibrationRunsCAEN:
 		t0 = time.time()
 		self.SetupDigitiser()
 		print 'Starting getting data using wavedump...'
-		p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD_cal.txt'.format(d=self.outdir)], bufsize=-1, stdin=subp.PIPE, stdout=subp.PIPE)
+		p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD_cal.txt'.format(d=self.outdir)], bufsize=-1, stdin=subp.PIPE)
 		t1 = time.time()
 		while p.poll() is None:
 			self.Delay(4)
