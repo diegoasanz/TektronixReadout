@@ -58,7 +58,7 @@ class CalibrationRunsCAEN:
 		self.struct_len = struct.calcsize(self.struct_fmt)
 		self.trig, self.signal = np.zeros(1, 'f8'), np.zeros(1, 'f8')
 		self.timev = np.zeros(1, 'f8')
-		self.sig_offset = 45 if self.bias >= 0 else -45
+		self.sig_offset = -45 if self.bias >= 0 else 45
 		self.trig_offset = 45
 
 		self.rawFile, self.treeRaw = None, None
