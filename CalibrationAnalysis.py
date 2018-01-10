@@ -2,11 +2,15 @@
 import csv
 import numpy as np
 import ROOT as ro
+import scipy.constants as sc
 from struct import unpack
 import time, os, sys
 from optparse import OptionParser
 import progressbar
 import ConfigParser
+import pymouse as pym
+import pykeyboard as pyk
+
 # from ROOT import TProfile2D, TTree, gStyle, TFile, vector, gDirectory, TCut, TBranch, TH2F, TCanvas, TH2D, TH1D, TGraph, TGraphErrors
 #from scipy.optimize import curve_fit
 import ipdb
@@ -29,25 +33,28 @@ class CalibrationAnalysis:
 		self.pedInput1Pos, self.pedInput2Pos, self.pedInput3Pos, self.pedInput4Pos = None, None, None, None
 		self.pedCal1Pos, self.pedCal2Pos, self.pedCal3Pos, self.pedCal4Pos = None, None, None, None
 		self.pedCal1, self.pedCal2, self.pedCal3, self.pedCal4, self.calVoltsReal1, self.calVoltsReal2, self.calVoltsReal3, self.calVoltsReal4 = {}, {}, {}, {}, {}, {}, {}, {}
+		self.calVoltsRealSigma1, self.calVoltsRealSigma2, self.calVoltsRealSigma3, self.calVoltsRealSigma4 = {}, {}, {}, {}
 		self.meanInputWaveGraph, self.meanOutputWaveGraph, self.vCalSignalGraph, self.chargeSignalGraph = None, None, None, None
 		self.vCalSignalFit, self.chargeSignalFit = None, None
 		self.bar = None
 		self.timePeakReal, self.posHalfCal = None, None
 		self.fileCal = None
 
-		self.boolInputConverted, self.boolInputHasTreeCSV, self.boolInputHasVectors, self.boolInputHasScalars = {}, {}, {}, {}
-		self.boolOutputConverted, self.boolOutputHasTreeCSV, self.boolOutputHasVectors, self.boolOutputHasScalars = {}, {}, {}, {}
+		self.boolInputConverted, self.boolInputHasTreeCSV, self.boolInputHasVectors, self.boolInputHasScalars, self.boolInputIsAnalysed = {}, {}, {}, {}, {}
+		self.boolOutputConverted, self.boolOutputHasTreeCSV, self.boolOutputHasVectors, self.boolOutputHasScalars, self.boolOutputIsAnalysed = {}, {}, {}, {}, {}
 		self.fileOutputRaw, self.treeRawOutput, self.treeOutputCSV = None, None, None
 		self.fileInputRaw, self.treeRawInput, self.treeInputCSV = None, None, None
 
 		self.peakBack, self.peakForth = 469e-9, 511e-9
 		self.averagingTime = self.peakBack + self.peakForth
 		self.pedestalTEndPos = -20e-9
+		self.vcal_syst_factor = 0.04
 
 		self.calDist1, self.calDist2, self.calDist3, self.calDist4 = 10e-9, 20e-9, 50e-9, 1e-6
 
 		self.calVolts, self.calVoltsReal, self.runInputFiles, self.runOutputFiles, self.runFilesDir = None, {}, {}, {}, None
 		self.inputSuffix = self.outputSuffix = self.inputPrefix = self.outputPrefix = ''
+		self.factInputData = self.factOutputData = 1
 		self.ReadInputFile()
 
 		self.timeBraOutput, self.voltBraOutput = None, None
@@ -59,14 +66,15 @@ class CalibrationAnalysis:
 			self.vcal = vcal
 			print 'Loading data for vcal: {v}mV...'.format(v=1000*self.vcal)
 			self.timePeak = 2.1270e-6 if self.vcal >= 0 else 2.1185e-6
-			self.boolInputConverted[self.vcal], self.boolInputHasVectors[self.vcal], self.boolInputHasTreeCSV[self.vcal], self.boolInputHasScalars[self.vcal] = False, False, False, False
-			self.boolOutputConverted[self.vcal], self.boolOutputHasVectors[self.vcal], self.boolOutputHasTreeCSV[self.vcal], self.boolOutputHasScalars[self.vcal] = False, False, False, False
+			self.boolInputConverted[self.vcal], self.boolInputHasVectors[self.vcal], self.boolInputHasTreeCSV[self.vcal], self.boolInputHasScalars[self.vcal], self.boolInputIsAnalysed[self.vcal] = False, False, False, False, False
+			self.boolOutputConverted[self.vcal], self.boolOutputHasVectors[self.vcal], self.boolOutputHasTreeCSV[self.vcal], self.boolOutputHasScalars[self.vcal], self.boolOutputIsAnalysed[self.vcal] = False, False, False, False, False
 			self.ped[self.vcal], self.pedSigma[self.vcal], self.pedSignal[self.vcal] = np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
 			self.pedSignalReal[self.vcal], self.signal[self.vcal], self.signalReal[self.vcal] = np.zeros(1,'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
 			self.pedInput1[self.vcal], self.pedInput2[self.vcal], self.pedInput3[self.vcal], self.pedInput4[self.vcal] = np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
 			self.pedInputSigma1[self.vcal], self.pedInputSigma2[self.vcal], self.pedInputSigma3[self.vcal], self.pedInputSigma4[self.vcal] = np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
 			self.pedCal1[self.vcal], self.pedCal2[self.vcal], self.pedCal3[self.vcal], self.pedCal4[self.vcal] = np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
 			self.calVoltsReal1[self.vcal], self.calVoltsReal2[self.vcal], self.calVoltsReal3[self.vcal], self.calVoltsReal4[self.vcal] = np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
+			self.calVoltsRealSigma1[self.vcal], self.calVoltsRealSigma2[self.vcal], self.calVoltsRealSigma3[self.vcal], self.calVoltsRealSigma4[self.vcal] = np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
 			self.rawInputTreeNames[self.vcal] = 'raw_in_tree_cal_pos_{b}mV_waves'.format(b=abs(self.vcal * 1000)) if self.vcal >= 0 else 'raw_in_tree_cal_neg_{b}mV_waves'.format(b=abs(self.vcal * 1000))
 			self.rawOutputTreeNames[self.vcal] = 'raw_out_tree_cal_pos_{b}mV_waves'.format(b=abs(self.vcal * 1000)) if self.vcal >= 0 else 'raw_out_tree_cal_neg_{b}mV_waves'.format(b=abs(self.vcal * 1000))
 			self.ConvertFiles()
@@ -104,12 +112,16 @@ class CalibrationAnalysis:
 				self.inputPrefix = parser.get('INPUT', 'prefix')
 			if parser.has_option('INPUT', 'suffix'):
 				self.inputSuffix = parser.get('INPUT', 'suffix')
+			if parser.has_option('INPUT', 'factorAnalysis'):
+				self.factInputData = parser.getfloat('INPUT', 'factorAnalysis')
 
 		if parser.has_section('OUTPUT'):
 			if parser.has_option('OUTPUT', 'prefix'):
 				self.outputPrefix = parser.get('OUTPUT', 'prefix')
 			if parser.has_option('OUTPUT', 'suffix'):
 				self.outputSuffix = parser.get('OUTPUT', 'suffix')
+			if parser.has_option('OUTPUT', 'factorAnalysis'):
+				self.factOutputData = parser.getfloat('OUTPUT', 'factorAnalysis')
 
 		for val in self.calVolts:
 			if val >= 0:
@@ -148,7 +160,7 @@ class CalibrationAnalysis:
 		# 	                 -0.0200: 'waves_Calibration_Neg_20.0mV.csv',
 		# 	                 -0.01589: 'waves_Calibration_Neg_15.89mV.csv',
 		# 	                 -0.01262: 'waves_Calibration_Neg_12.62mV.csv',
-		# 	                 -0.01002: 'waves_Calibration_Neg_10.02mV.csv', TODO AQUI ESTAMOS
+		# 	                 -0.01002: 'waves_Calibration_Neg_10.02mV.csv',
 		# 	                 -0.007962: 'waves_Calibration_Neg_7.962mV.csv',
 		#   4000
 		# 	                 -0.006325: 'waves_Calibration_Neg_6.325mV.csv',
@@ -161,11 +173,11 @@ class CalibrationAnalysis:
 		# 	                 0.01262: 'waves_Calibration_Pos_12.62mV.csv',
 		# 	                 0.01589: 'waves_Calibration_Pos_15.89mV.csv',
 		# 	                 0.0200: 'waves_Calibration_Pos_20.0mV.csv',
-		#   2000
+		#   2000                                                            TODO AQUI ESTAMOS
 		# 	                 0.02518: 'waves_Calibration_Pos_25.18mV.csv',
 		# 	                 0.0317: 'waves_Calibration_Pos_31.7mV.csv',
 		# 	                 0.03991: 'waves_Calibration_Pos_39.91mV.csv',
-		# 	                 0.05024: 'waves_Calibration_Pos_50.24mV.csv',
+		# 	                 0.05024: 'waves_Calibration_Pos_50.24mV.csv',  TODO quitar atenuador 20db
 		# 	                 0.06325: 'waves_Calibration_Pos_63.25mV.csv',
 		#   1000
 		# 	                 0.07962: 'waves_Calibration_Pos_79.62mV.csv',
@@ -193,12 +205,33 @@ class CalibrationAnalysis:
 		                     0.1002: 1.009E-01, 0.1262: 1.272E-01, 0.1589: 1.599E-01, 0.2000: 2.017E-01, 0.2518: 2.530E-01, 0.3170: 3.191E-01, 0.3991: 4.020E-01, 0.5024: 5.106E-01, 0.6325: 6.331E-01,
 		                     0.7962: 8.081E-01, 1.002: 1.012, 1.262: 1.280, 1.589: 1.599, 2: 1.996}
 
-		self.CalculateChargeFromVcal()
+		# self.CalculateChargeFromVcal()
 		
-	def CalculateChargeFromVcal(self):
-		factor = 0.001
-		self.calCharge = {vcal: self.calVoltsReal[vcal]*0.001 for vcal in self.calVolts}
-		self.calChargeSigma = {vcal: ((factor * self.calVoltsReal[vcal]*0.04)**2)**0.5 for vcal in self.calVolts}
+	def CalculateChargeFromVcal(self, realCal=4):
+		def CalculateFactor():
+			e_charge = sc.codata.value('elementary charge')
+			r5a, r5b, r5c = 56.0, 467.0, 4.505  # r5a, r5b and r5c are input resistance, and the voltage divisor resistors respectively
+			c9, cp = 1.8e-12, 0.2e-12  # c9 and cp are the input capacitance similar to sensor and the parasitic capacitance estimated by Ulf respectively
+			tr5a = tr5b = tr5c = 0.012  # tolerances of the resistors r5a, r5b and r5c respectively
+			tc9, tcp = 0.02, 0.2  # tolerances of the c9 capacitor and an estimate of the tolerance of Ulf's estimation respectively
+			# Returns a tuple with the value of the factor and its uncertainty
+			return (r5c * (c9 + cp)/(r5c + r5b)) / e_charge, (r5c * np.sqrt(r5b**2 * (c9 + cp)**2 * (tr5b**2 + tr5c**2)/(r5b + r5c)**2 + (c9 * tc9)**2 + (cp * tcp)**2) / (r5b + r5c)) / e_charge
+
+		(fact, fact_uncert) = CalculateFactor()
+		vcal_sys_percent = self.vcal_syst_factor  # systematic uncertainty due to raise time of the pulser
+
+		if realCal == 1:
+			self.calCharge = {vcal: self.calVoltsReal1[vcal]*fact for vcal in self.calVolts}
+			self.calChargeSigma = {vcal: np.sqrt((self.calVoltsReal1[vcal]*fact_uncert)**2 + fact**2 * (self.calVoltsRealSigma1[vcal]**2 + (self.calVoltsReal1[vcal] * vcal_sys_percent)**2)) for vcal in self.calVolts}
+		elif realCal == 2:
+			self.calCharge = {vcal: self.calVoltsReal2[vcal]*fact for vcal in self.calVolts}
+			self.calChargeSigma = {vcal: np.sqrt((self.calVoltsReal2[vcal]*fact_uncert)**2 + fact**2 * (self.calVoltsRealSigma2[vcal]**2 + (self.calVoltsReal2[vcal] * vcal_sys_percent)**2)) for vcal in self.calVolts}
+		elif realCal == 3:
+			self.calCharge = {vcal: self.calVoltsReal3[vcal]*fact for vcal in self.calVolts}
+			self.calChargeSigma = {vcal: np.sqrt((self.calVoltsReal3[vcal]*fact_uncert)**2 + fact**2 * (self.calVoltsRealSigma3[vcal]**2 + (self.calVoltsReal3[vcal] * vcal_sys_percent)**2)) for vcal in self.calVolts}
+		else:
+			self.calCharge = {vcal: self.calVoltsReal4[vcal]*fact for vcal in self.calVolts}
+			self.calChargeSigma = {vcal: np.sqrt((self.calVoltsReal4[vcal]*fact_uncert)**2 + fact**2 * (self.calVoltsRealSigma4[vcal]**2 + (self.calVoltsReal4[vcal] * vcal_sys_percent)**2)) for vcal in self.calVolts}
 
 	def OpenInputFile(self, mode='READ'):
 		if self.fileInputRaw is not None:
@@ -589,6 +622,7 @@ class CalibrationAnalysis:
 		self.pedInputSigma1[self.vcal], self.pedInputSigma2[self.vcal], self.pedInputSigma3[self.vcal], self.pedInputSigma4[self.vcal] = np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
 		self.pedCal1[self.vcal], self.pedCal2[self.vcal], self.pedCal3[self.vcal], self.pedCal4[self.vcal] = np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
 		self.calVoltsReal1[self.vcal], self.calVoltsReal2[self.vcal], self.calVoltsReal3[self.vcal], self.calVoltsReal4[self.vcal] = np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
+		self.calVoltsRealSigma1[self.vcal], self.calVoltsRealSigma2[self.vcal], self.calVoltsRealSigma3[self.vcal], self.calVoltsRealSigma4[self.vcal] = np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
 
 		self.posHalfCal = self.FindTimeHalfCalPosition()
 		(self.pedInput1Pos, self.pedInput2Pos, self.pedInput3Pos, self.pedInput4Pos) = self.FindInputPedestalPositions()
@@ -688,7 +722,7 @@ class CalibrationAnalysis:
 		if saveFile:
 			t0 = time.time()
 			print 'Calculating real calibration input signals...'
-			self.CreateProgressBar(self.eventInput)
+			self.CreateProgressBar(self.eventsInput)
 			self.bar.start()
 		for ev in self.eventVectInput:
 			if self.acceptEventsInput[ev]:
@@ -816,18 +850,22 @@ class CalibrationAnalysis:
 		self.pedInputSigma1[self.vcal].fill(tempPed1.std())
 		self.pedCal1[self.vcal].fill(tempPedCal1.mean())
 		self.calVoltsReal1[self.vcal].fill(tempCal1.mean())
+		self.calVoltsRealSigma1[self.vcal].fill(tempCal1.std())
 		self.pedInput2[self.vcal].fill(tempPed2.mean())
 		self.pedInputSigma2[self.vcal].fill(tempPed2.std())
 		self.pedCal2[self.vcal].fill(tempPedCal2.mean())
 		self.calVoltsReal2[self.vcal].fill(tempCal2.mean())
+		self.calVoltsRealSigma2[self.vcal].fill(tempCal2.std())
 		self.pedInput3[self.vcal].fill(tempPed3.mean())
 		self.pedInputSigma3[self.vcal].fill(tempPed3.std())
 		self.pedCal3[self.vcal].fill(tempPedCal3.mean())
 		self.calVoltsReal3[self.vcal].fill(tempCal3.mean())
+		self.calVoltsRealSigma3[self.vcal].fill(tempCal3.std())
 		self.pedInput4[self.vcal].fill(tempPed4.mean())
 		self.pedInputSigma4[self.vcal].fill(tempPed4.std())
 		self.pedCal4[self.vcal].fill(tempPedCal4.mean())
 		self.calVoltsReal4[self.vcal].fill(tempCal4.mean())
+		self.calVoltsRealSigma4[self.vcal].fill(tempCal4.std())
 
 	def CalculateSignalsAllWaves(self, saveFile=True):
 		if saveFile:
@@ -934,19 +972,19 @@ class CalibrationAnalysis:
 		self.signalAndPedestalMeanWaveAverageReal = self.wavesMeanVectOutput[self.signalTimeIndicesReal].mean()
 		self.signalMeanWaveAverageReal = self.signalAndPedestalMeanWaveAverageReal - self.pedestalMeanWaveAverage
 
-	def AnalyseAllCalibrationFiles(self):
+	def AnalyseAllCalibrationFiles(self, realCal=4):
 		t0 = time.time()
 		for vcal in self.calVolts:
 			self.vcal = vcal
-			self.AnalysisCalibrationFiles()
+			self.AnalysisCalibrationFiles(realCal)
 		t0 = time.time() - t0
 		print 'Time to get all the values to do the regression:', t0, 'seconds'
 
-	def AnalysisCalibrationFiles(self):
-		self.AnalysisCalibrationInputFile()
+	def AnalysisCalibrationFiles(self, realCal=4):
+		self.AnalysisCalibrationInputFile(realCal)
 		self.AnalysisCalibrationOutputFile()
 
-	def AnalysisCalibrationInputFile(self):
+	def AnalysisCalibrationInputFile(self, realCal=4):
 		t0 = time.time()
 		print 'Analysing {vc}mV calibration signal...'.format(vc=self.vcal*1000)
 		self.OpenInputFile('UPDATE')
@@ -955,6 +993,7 @@ class CalibrationAnalysis:
 			self.AnalysisAllInputWaves(True)
 		else:
 			self.LoadInputScalars()
+		self.CalculateChargeFromVcal(realCal)
 		t0 = time.time() - t0
 		print 'Time getting mean calibration input voltage and noise for {vc}mV calibration: {t} seconds'.format(vc=self.vcal, t=t0)
 
@@ -972,43 +1011,31 @@ class CalibrationAnalysis:
 
 	def CheckInputFileForScalars(self):
 		t0 = time.time()
-		print 'Checking existence of scalar branches...'
+		print 'Checking if input file has been analysed...'
 		if not self.fileInputRaw.IsOpen():
 			self.OpenInputFile('UPDATE')
-		self.treeRawInput = self.fileInputRaw.Get(self.rawInputTreeNames[self.vcal])
-		if not self.treeRawInput:
-			print 'The raw tree has not been created. Creating...'
-			self.CreateInputRawRootFile()
+		self.LoadInputTreeRaw(False)
+		if not self.treeRawInput.GetBranch('pedestal1'):
+			print 'The input raw tree does not have the scalar branches'
 		else:
-			t0 = time.time() - t0
-			self.boolInputHasVectors[self.vcal] = True
-			if not self.treeRawInput.GetBranch('pedestal'):
-				print 'The raw tree does not have the scalar branches'
-			else:
-				self.boolInputHasScalars[self.vcal] = True
-				print 'The raw tree has the scalar branches'
+			self.boolInputHasScalars[self.vcal] = True
+			print 'The input raw tree has the scalar branches'
 		t0 = time.time() - t0
-		print 'Time checking for scalar branches:', t0, 'seconds'
+		print 'Time checking for scalar branches in the input tree:', t0, 'seconds'
 
 	def CheckOutputFileForScalars(self):
 		t0 = time.time()
-		print 'Checking existence of scalar branches...'
+		print 'Checking if output file has been analysed...'
 		if not self.fileOutputRaw.IsOpen():
 			self.OpenOutputFile('UPDATE')
-		self.treeRawOutput = self.fileOutputRaw.Get(self.rawOutputTreeNames[self.vcal])
-		if not self.treeRawOutput:
-			print 'The raw tree has not been created. Creating...'
-			self.CreateOutputRawRootFile()
+		self.LoadOutputTreeRaw(False)
+		if not self.treeRawOutput.GetBranch('pedestal'):
+			print 'The output raw tree does not have the scalar branches'
 		else:
-			t0 = time.time() - t0
-			self.boolOutputHasVectors[self.vcal] = True
-			if not self.treeRawOutput.GetBranch('pedestal'):
-				print 'The raw tree does not have the scalar branches'
-			else:
-				self.boolOutputHasScalars[self.vcal] = True
-				print 'The raw tree has the scalar branches'
+			self.boolOutputHasScalars[self.vcal] = True
+			print 'The output raw tree has the scalar branches'
 		t0 = time.time() - t0
-		print 'Time checking for scalar branches:', t0, 'seconds'
+		print 'Time checking for scalar branches in the output tree:', t0, 'seconds'
 
 	def LoadOutputScalars(self):
 		self.LoadOutputTreeRaw(False)
@@ -1136,31 +1163,46 @@ class CalibrationAnalysis:
 		self.pedInputSigma1[self.vcal].fill(tempPed1.std())
 		self.pedCal1[self.vcal].fill(tempPedCal1.mean())
 		self.calVoltsReal1[self.vcal].fill(tempCal1.mean())
+		self.calVoltsRealSigma1[self.vcal].fill(tempCal1.std())
 		self.pedInput2[self.vcal].fill(tempPed2.mean())
 		self.pedInputSigma2[self.vcal].fill(tempPed2.std())
 		self.pedCal2[self.vcal].fill(tempPedCal2.mean())
 		self.calVoltsReal2[self.vcal].fill(tempCal2.mean())
+		self.calVoltsRealSigma2[self.vcal].fill(tempCal2.std())
 		self.pedInput3[self.vcal].fill(tempPed3.mean())
 		self.pedInputSigma3[self.vcal].fill(tempPed3.std())
 		self.pedCal3[self.vcal].fill(tempPedCal3.mean())
 		self.calVoltsReal3[self.vcal].fill(tempCal3.mean())
+		self.calVoltsRealSigma3[self.vcal].fill(tempCal3.std())
 		self.pedInput4[self.vcal].fill(tempPed4.mean())
 		self.pedInputSigma4[self.vcal].fill(tempPed4.std())
 		self.pedCal4[self.vcal].fill(tempPedCal4.mean())
 		self.calVoltsReal4[self.vcal].fill(tempCal4.mean())
+		self.calVoltsRealSigma4[self.vcal].fill(tempCal4.std())
 
 		# TODO: use options output real or not real, and input 1, 2, 3 or 4 for considering different cases due to our ignorance...
-	def SaveCalibrations(self, suffix=''):
+	def SaveCalibrations(self, suffix='', realCal=4):
 		self.fileCal = ro.TFile('calibrations_{s}.root'.format(s=suffix), 'RECREATE')
-		self.CreateVcalVSignalRegression()
-		self.CreateChargeVSignalRegression()
+		self.CreateVcalVSignalRegression(realCal)
+		self.CreateChargeVSignalRegression(realCal)
 		self.fileCal.Close()
 
-	def CreateVcalVSignalRegression(self):
+	def CreateVcalVSignalRegression(self, realCal=4):
 		if self.fileCal.GetOption() == 'READ':
 			self.fileCal.ReOpen('UPDATE')
-		xaxis = np.array([self.calVoltsReal[vcal] for vcal in self.calVolts], 'f8')
-		xaxisSigma = np.array([self.calVoltsReal[vcal]*0.04 for vcal in self.calVolts], 'f8')
+		syst = self.vcal_syst_factor
+		if realCal == 1:
+			xaxis = np.array([self.calVoltsReal1[vcal] for vcal in self.calVolts], 'f8')
+			xaxisSigma = np.array([np.sqrt((self.calVoltsReal1[vcal] * syst)**2 + self.calVoltsRealSigma1[vcal]**2) for vcal in self.calVolts], 'f8')
+		elif realCal == 2:
+			xaxis = np.array([self.calVoltsReal2[vcal] for vcal in self.calVolts], 'f8')
+			xaxisSigma = np.array([np.sqrt((self.calVoltsReal2[vcal] * syst)**2 + self.calVoltsRealSigma2[vcal]**2) for vcal in self.calVolts], 'f8')
+		elif realCal == 3:
+			xaxis = np.array([self.calVoltsReal3[vcal] for vcal in self.calVolts], 'f8')
+			xaxisSigma = np.array([np.sqrt((self.calVoltsReal3[vcal] * syst)**2 + self.calVoltsRealSigma3[vcal]**2) for vcal in self.calVolts], 'f8')
+		else:
+			xaxis = np.array([self.calVoltsReal4[vcal] for vcal in self.calVolts], 'f8')
+			xaxisSigma = np.array([np.sqrt((self.calVoltsReal4[vcal] * syst)**2 + self.calVoltsRealSigma4[vcal]**2) for vcal in self.calVolts], 'f8')
 		yaxis = np.array([self.signal[vcal] for vcal in self.calVolts], 'f8')
 		yaxisSigma = np.array([self.pedSigma[vcal] for vcal in self.calVolts], 'f8')
 		self.vCalSignalGraph = ro.TGraphErrors(len(self.calVolts), xaxis, yaxis, xaxisSigma, yaxisSigma)
@@ -1174,9 +1216,10 @@ class CalibrationAnalysis:
 		self.vCalSignalFit.Write()
 		self.fileCal.Write()
 
-	def CreateChargeVSignalRegression(self):
+	def CreateChargeVSignalRegression(self, realCal=4):
 		if self.fileCal.GetOption() == 'READ':
 			self.fileCal.ReOpen('UPDATE')
+		self.CalculateChargeFromVcal(realCal)
 		xaxis = np.array([self.signal[vcal] for vcal in self.calVolts], 'f8')
 		xaxisSigma = np.array([self.pedSigma[vcal] for vcal in self.calVolts], 'f8')
 		yaxis = np.array([self.calCharge[vcal] for vcal in self.calVolts], 'f8')
