@@ -86,7 +86,7 @@ class CalibrationRunsCAEN:
 					if parser.has_option('RUN', 'trig_val'):
 						self.trigVal = parser.getfloat('RUN', 'trig_val')
 					if parser.has_option('RUN', 'time'):
-						self.points = int(np.ceil(parser.getfloat('RUN', 'time') / self.time_res))
+						self.points = int(np.ceil(parser.getfloat('RUN', 'time') * 1e-6 / self.time_res))
 					if parser.has_option('RUN', 'post_trigger_percent'):
 						self.post_trig_percent = parser.getint('RUN', 'post_trigger_percent')
 				if parser.has_section('OUTPUT'):
