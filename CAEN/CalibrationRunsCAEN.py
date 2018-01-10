@@ -136,15 +136,21 @@ class CalibrationRunsCAEN:
 		print 'Starting getting data using wavedump...'
 		p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD_cal.txt'.format(d=self.outdir)], bufsize=-1, stdin=subp.PIPE)
 		t1 = time.time()
+		# while p.poll() is None:
+		self.Delay(4)
+		p.stdin.write('c')
+		p.stdin.flush()
+		self.Delay(1.5)
+		p.stdin.write('W')
+		p.stdin.flush()
+		self.Delay(1.5)
+		p.stdin.write('P')
+		p.stdin.flush()
+		self.Delay(1.5)
+		p.stdin.write('s')
+		p.stdin.flush()
 		while p.poll() is None:
-			self.Delay(4)
-			p.communicate('c')
-			self.Delay(1.5)
-			p.communicate('W')
-			self.Delay(1.5)
-			p.communicate('P')
-			self.Delay(1.5)
-			p.communicate('s')
+			continue
 		t0 = time.time() - t0
 		print 'Total time saving {m} events:'.format(m=self.meas), t0, 'seconds'
 		self.CreateRootFile()
