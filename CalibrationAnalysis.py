@@ -56,11 +56,11 @@ class CalibrationAnalysis:
 		self.calVolts, self.calVoltsReal, self.runInputFiles, self.runOutputFiles, self.runFilesDir = None, {}, {}, {}, None
 		self.inputSuffix = self.outputSuffix = self.inputPrefix = self.outputPrefix = ''
 		self.factInputData = self.factOutputData = 1
+		self.rawInputTreeNames, self.rawOutputTreeNames = {}, {}
 		self.ReadInputFile()
 
 		self.timeBraOutput, self.voltBraOutput = None, None
 		self.timeBraInput, self.voltBraInput = None, None
-		self.rawInputTreeNames, self.rawOutputTreeNames = {}, {}
 		self.pedestalTimeIndices, self.signalTimeIndices, self.signalTimeIndicesReal = None, None, None
 		self.acceptEventsOutput, self.acceptEventsInput = None, None
 		for vcal in self.calVolts:
@@ -76,8 +76,8 @@ class CalibrationAnalysis:
 			self.pedCal1[self.vcal], self.pedCal2[self.vcal], self.pedCal3[self.vcal], self.pedCal4[self.vcal] = np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
 			self.calVoltsReal1[self.vcal], self.calVoltsReal2[self.vcal], self.calVoltsReal3[self.vcal], self.calVoltsReal4[self.vcal] = np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
 			self.calVoltsRealSigma1[self.vcal], self.calVoltsRealSigma2[self.vcal], self.calVoltsRealSigma3[self.vcal], self.calVoltsRealSigma4[self.vcal] = np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
-			self.runInputFiles[self.vcal] = self.runInputFiles[self.vcal] + '.csv'
-			self.runOutputFiles[self.vcal] = self.runOutputFiles[self.vcal] + '.csv'
+			self.runInputFiles[self.vcal] = self.rawInputTreeNames[self.vcal] + '.csv'
+			self.runOutputFiles[self.vcal] = self.rawOutputTreeNames[self.vcal] + '.csv'
 			self.ConvertFiles()
 		self.time1 = time.time()
 		tempt = self.time1 - self.time0
@@ -126,11 +126,11 @@ class CalibrationAnalysis:
 
 		for val in self.calVolts:
 			if val >= 0:
-				self.rawInputTreeNames[val] = '{p}_Pos_{v}{s}'.format(p=self.inputPrefix, v=abs(1000*val), s=self.inputSuffix)
-				self.rawOutputTreeNames[val] = '{p}_Pos_{v}{s}'.format(p=self.outputPrefix, v=abs(1000*val), s=self.outputSuffix)
+				self.rawInputTreeNames[val] = '{p}_Pos_{v}mV{s}'.format(p=self.inputPrefix, v=abs(1000*val), s=self.inputSuffix)
+				self.rawOutputTreeNames[val] = '{p}_Pos_{v}mV{s}'.format(p=self.outputPrefix, v=abs(1000*val), s=self.outputSuffix)
 			else:
-				self.rawInputTreeNames[val] = '{p}_Neg_{v}{s}'.format(p=self.inputPrefix, v=abs(1000*val), s=self.inputSuffix)
-				self.rawOutputTreeNames[val] = '{p}_Neg_{v}{s}'.format(p=self.outputPrefix, v=abs(1000*val), s=self.outputSuffix)
+				self.rawInputTreeNames[val] = '{p}_Neg_{v}mV{s}'.format(p=self.inputPrefix, v=abs(1000*val), s=self.inputSuffix)
+				self.rawOutputTreeNames[val] = '{p}_Neg_{v}mV{s}'.format(p=self.outputPrefix, v=abs(1000*val), s=self.outputSuffix)
 
 		# self.runFiles = {val: '{p}{v:.1f}{s}'.format(p=self.inputPrefix, v=val*1000, s=self.inputSuffix) if abs(val) >= 0.1 else '{p}{v:.1f}{s}'.format(p=self.inputPrefix, v=val, s=self.inputSuffix) for val in self.calVolts}
 		#
