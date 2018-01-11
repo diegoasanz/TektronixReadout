@@ -49,7 +49,7 @@ class CalibrationAnalysis:
 		self.peakBack, self.peakForth = 469e-9, 511e-9
 		self.averagingTime = self.peakBack + self.peakForth
 		self.pedestalTEndPos = -20e-9
-		self.vcal_syst_factor = 0.04
+		self.vcal_syst_factor = 0.04  # 0.04
 
 		self.calDist1, self.calDist2, self.calDist3, self.calDist4 = 10e-9, 20e-9, 50e-9, 1e-6
 
@@ -214,8 +214,12 @@ class CalibrationAnalysis:
 			c9, cp = 1.8e-12, 0.2e-12  # c9 and cp are the input capacitance similar to sensor and the parasitic capacitance estimated by Ulf respectively
 			tr5a = tr5b = tr5c = 0.012  # tolerances of the resistors r5a, r5b and r5c respectively
 			tc9, tcp = 0.02, 0.2  # tolerances of the c9 capacitor and an estimate of the tolerance of Ulf's estimation respectively
+			gainV, tgainV = np.double(9.7450864e-3), np.double(4.9778364e-5)  # measured directoy the gain in voltage with dc input and multimeter precission for several voltages and ranges. weighted mean
 			# Returns a tuple with the value of the factor and its uncertainty
-			return (r5c * (c9 + cp)/(r5c + r5b)) / e_charge, (r5c * np.sqrt(r5b**2 * (c9 + cp)**2 * (tr5b**2 + tr5c**2)/(r5b + r5c)**2 + (c9 * tc9)**2 + (cp * tcp)**2) / (r5b + r5c)) / e_charge
+			# return (r5c * (c9 + cp)/(r5c + r5b)) / e_charge, (r5c * np.sqrt(r5b**2 * (c9 + cp)**2 * (tr5b**2 + tr5c**2)/(r5b + r5c)**2 + (c9 * tc9)**2 + (cp * tcp)**2) / (r5b + r5c)) / e_charge
+			#f1 = (r5c * (c9 + cp)/(r5c + r5b)) / e_charge, (r5c * np.sqrt(r5b**2 * (c9 + cp)**2 * (tr5b**2 + tr5c**2)/(r5b + r5c)**2 + (c9 * tc9)**2 + (cp * tcp)**2) / (r5b + r5c)) / e_charge
+			f2 = gainV * (c9 + cp) / e_charge, np.sqrt(((c9 + cp) * tgainV) ** 2 + gainV ** 2 * (tc9 ** 2 + tcp ** 2))
+			return f2
 
 		(fact, fact_uncert) = CalculateFactor()
 		vcal_sys_percent = self.vcal_syst_factor  # systematic uncertainty due to raise time of the pulser
