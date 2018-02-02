@@ -21,10 +21,40 @@ class Channel_Caen:
 		self.ch = ch
 		self.type = ch_type
 		self.verb = verb
+
 		self.base_line_u_adcs = 0
 		self.dc_offset_percent = 0
+		self.thr_counts = 0
 		self.edge = -1
-		self.name = str(ch)
+		self.name = str(ch_type)
+
+	def Set_Channel(self, settings):
+		if self.type == 'signal':
+			self.edge = -int(settings.bias/abs(settings.bias))
+			self.Calculate_DC_Offset_Percentage(settings)
+		elif self.type == 'trigger':
+			self.base_line_u_adcs = self.Calculate_Universal_ADCs(settings.trig_base_line_guess, settings.sigRes)
+			self.thr_counts = settings.trig_thr_counts
+			self.Calculate_DC_Offset_Percentage(settings)
+			self.edge = -1
+		elif self.type == 'anti_coincidence':
+			self.base_line_u_adcs = np.divide(settings.ac_base_line_guess, settings.sigRes, 'f8')
+			self.thr_counts = settings.ac_thr_counts
+			self.Calculate_DC_Offset_Percentage(settings)
+			self.edge = -1
+
+	def Calculate_DC_Offset_Percentage(self, settings):
+		if self.type == 'signal':
+			self.dc_offset_percent = 45 if settings.bias < 0 else -45
+		else:
+			self.dc_offset_percent = round(100 * np.divide(3 * self.thr_counts + self.base_line_u_adcs, 2.0**settings.dig_bits - 1.0, dtype='f8') - 50)
+
+	def Calculate_Universal_ADCs(self, value_volts, sig_res):
+		return np.divide(value_volts, sig_res, 'f8')
+
+	def Correct_Base_Line(self, mean_volts, settings):
+		self.base_line_u_adcs = self.Calculate_Universal_ADCs(mean_volts, settings.sigRes)
+		self.Calculate_DC_Offset_Percentage(settings)
 
 if __name__ == '__main__':
 	print 'bla'
