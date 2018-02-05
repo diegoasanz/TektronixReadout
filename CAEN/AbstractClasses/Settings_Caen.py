@@ -52,21 +52,47 @@ class Settings_Caen:
 						self.node = parser.getint('OPTILINK', 'node')
 					if parser.has_option('OPTILINK', 'vme_base_address'):
 						self.vme_b_addr = parser.getint('OPTILINK', 'vme_base_address')
-					if parser.has_option('OPTILINK', 'wavedump_path'):
-						self.wd_path = parser.get('OPTILINK', 'wavedump_path')
 				if parser.has_section('RUN'):
-					if parser.has_option('RUN', 'signal_channel') and self.sigCh == -1:
-						self.sigCh = parser.getint('RUN', 'signal_channel')
-					if parser.has_option('RUN', 'trig_channel') and self.trigCh == -1:
-						self.trigCh = parser.getint('RUN', 'trig_channel')
-					if parser.has_option('RUN', 'trig_val'):
-						self.trigVal = parser.getfloat('RUN', 'trig_val')
 					if parser.has_option('RUN', 'time'):
 						self.points = int(np.ceil(parser.getfloat('RUN', 'time') * 1e-6 / self.time_res))
 					if parser.has_option('RUN', 'post_trigger_percent'):
 						self.post_trig_percent = parser.getint('RUN', 'post_trigger_percent')
+					if parser.has_option('RUN', 'num_events'):
+						self.num_events = parser.getint('RUN', 'num_events')
+					if parser.has_option('RUN', 'time_calib'):
+						self.time_calib = parser.getfloat('RUN', 'time_calib')
+					if parser.has_option('RUN', 'sample_voltage'):
+						self.bias = parser.getfloat('RUN', 'sample_voltage')
+					if parser.has_option('RUN', 'input_range'):
+						self.input_range = parser.getfloat('RUN', 'input_range')
+					if parser.has_option('RUN', 'calib_path'):
+						self.calib_path = parser.get('RUN', 'calib_path')
+					if parser.has_option('RUN', 'simultaneous_conversion'):
+						self.simultaneous_conversion = bool(parser.getint('RUN', 'simultaneous_conversion'))
+
+				if parser.has_section('SIGNAL'):
+					if parser.has_option('SIGNAL', 'channel'):
+						self.sigCh = parser.getint('SIGNAL', 'channel')
+
+				if parser.has_section('TRIGGER'):
+					if parser.has_option('TRIGGER', 'channel'):
+						self.trigCh = parser.getint('TRIGGER', 'channel')
+					if parser.has_option('TRIGGER', 'base_line'):
+						self.trig_base_line = parser.getfloat('TRIGGER', 'base_line')
+					if parser.has_option('TRIGGER', 'thr_counts'):
+						self.trigVal = parser.getint('TRIGGER', 'thr_counts')
+
+				if parser.has_section('ANTICOINCIDENCE'):
+					if parser.has_option('ANTICOINCIDENCE', 'channel'):
+						self.ac_enable = True
+						self.acCh = parser.getint('ANTICOINCIDENCE', 'channel')
+					if parser.has_option('ANTICOINCIDENCE', 'base_line'):
+						self.ac_base_line = parser.getfloat('ANTICOINCIDENCE', 'base_line')
+					if parser.has_option('ANTICOINCIDENCE', 'thr_counts'):
+						self.ac_thr_counts = parser.getint('ANTICOINCIDENCE', 'thr_counts')
+
 				if parser.has_section('OUTPUT'):
-					if parser.has_option('OUTPUT', 'dir') and self.outdir == 'None':
+					if parser.has_option('OUTPUT', 'dir'):
 						self.outdir = parser.get('OUTPUT', 'dir')
 					if parser.has_option('OUTPUT', 'prefix'):
 						self.prefix = parser.get('OUTPUT', 'prefix')
@@ -103,39 +129,13 @@ class Settings_Caen:
 		self.outString3 = AddSuffix(self.outString3)
 		self.filename = self.outString3
 
-	def TakeTwoWaves(self):
-		t0 = time.time()
-		self.SetupDigitiser()
-		print 'Starting getting data using wavedump...'
-		p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD_cal.txt'.format(d=self.outdir)], bufsize=-1, stdin=subp.PIPE)
-		t1 = time.time()
-		# while p.poll() is None:
-		self.Delay(4)
-		p.stdin.write('c')
-		p.stdin.flush()
-		self.Delay(1.5)
-		p.stdin.write('W')
-		p.stdin.flush()
-		self.Delay(1.5)
-		p.stdin.write('P')
-		p.stdin.flush()
-		self.Delay(1.5)
-		p.stdin.write('s')
-		p.stdin.flush()
-		while p.poll() is None:
-			continue
-		t0 = time.time() - t0
-		print 'Total time saving {m} events:'.format(m=self.meas), t0, 'seconds'
-		self.CreateRootFile()
-		self.MoveBinaryFiles()
-
 	def Delay(self, ti=1.0):
 		t0 = time.time()
 		while time.time() - t0 < ti:
 			continue
 		return
 
-	def SetupDigitiser(self):
+	def SetupDigitiser(self, doBaseLines=False, signal=None, trigger=None, ac=None, events_written=0):
 		print 'Creating digitiser CAEN V1730D configuration file... ', ; sys.stdout.flush()
 		rfile = open('{d}/WaveDumpConfig_CCD_cal.txt'.format(d=self.outdir), 'w')
 		rfile.write('[COMMON]')
@@ -150,7 +150,10 @@ class Settings_Caen:
 		rfile.write('\n\n# specify the amount of samples to save. This defines the event window')
 		rfile.write('\nRECORD_LENGTH\t{p}'.format(p=int(self.points)))
 		rfile.write('\n\n# number of events to save in the file')
-		rfile.write('\nMAX_NUM_EVENTS\t{n}'.format(n=int(self.meas)))
+		if doBaseLines:
+			rfile.write('\nMAX_NUM_EVENTS\t{n}'.format(n=1))
+		else:
+			rfile.write('\nMAX_NUM_EVENTS\t{n}'.format(n=self.num_events - events_written))
 		rfile.write('\n\nTEST_PATTERN\tNO')
 		rfile.write('\n\nENABLE_DES_MODE\tNO')
 		rfile.write('\n\n# use external trigger. Options are: DISABLED, ACQUISITION_ONLY, ACQUISITION_AND_TRGOUT')
@@ -168,72 +171,39 @@ class Settings_Caen:
 
 		sig_polarity = 'POSITIVE' if self.bias >= 0 else 'NEGATIVE'
 
-		rfile.write('\n\n# configuration for each channel [0] to [7]')
+		rfile.write('\n\n# configuration for each channel [0] to [16], although it only has 8 channels ;)')
 		for ch in xrange(16):
 			rfile.write('\n\n[{ch}]'.format(ch=ch))
-			if ch == self.sigCh or ch == self.trigCh:
+			if ch == signal.ch or ch == trigger.ch:
 				rfile.write('\nENABLE_INPUT\tYES')
+			elif not not ac:
+				if ch == ac.ch:
+					rfile.write('\nENABLE_INPUT\tYES')
 			else:
 				rfile.write('\nENABLE_INPUT\tNO')
-			if ch == self.sigCh:
+			if ch == signal.ch:
 				rfile.write('\nPULSE_POLARITY\t{sp}'.format(sp=sig_polarity))
-				rfile.write('\nDC_OFFSET\t{o}'.format(o=self.sig_offset))
+				rfile.write('\nDC_OFFSET\t{o}'.format(o=signal.dc_offset_percent))
 				rfile.write('\nCHANNEL_TRIGGER\tDISABLED')
 			if ch == self.trigCh:
-				rfile.write('\nPULSE_POLARITY\tPOSITIVE')
-				rfile.write('\nDC_OFFSET\t{o}'.format(o=self.trig_offset))
-				rfile.write('\nCHANNEL_TRIGGER\tACQUISITION_ONLY')
-				rfile.write('\nTRIGGER_THRESHOLD\t{th}'.format(th=int(round(np.divide(self.trigVal+1-self.trig_offset/50.0, self.sigRes)))))
+				rfile.write('\nPULSE_POLARITY\tNEGATIVE')
+				rfile.write('\nDC_OFFSET\t{o}'.format(o=trigger.dc_offset_percent))
+				if doBaseLines:
+					rfile.write('\nCHANNEL_TRIGGER\tDISABLED')
+				else:
+					rfile.write('\nCHANNEL_TRIGGER\tACQUISITION_ONLY')
+					rfile.write('\nTRIGGER_THRESHOLD\t{th}'.format(th=self.GetTriggerValueADCs(trigger.dc_offset_percent)))
+			if not not ac:
+				if ch == ac.ch:
+					rfile.write('\nPULSE_POLARITY\tNEGATIVE')
+					rfile.write('\nDC_OFFSET\t{o}'.format(o=ac.dc_offset_percent))
+					rfile.write('\nCHANNEL_TRIGGER\tDISABLED')
 		rfile.write('\n')
 		rfile.close()
 		print 'Done'
 
-	def CreateRootFile(self):
-		print 'Start creating root file'
-		t0 = time.time()
-		self.rawFile = ro.TFile('{d}/Runs/{r}.root'.format(d=self.outdir, r=self.filename), 'RECREATE')
-		self.treeRaw = ro.TTree(self.filename, self.filename)
-		fs = open('wave{s}.dat'.format(s=self.sigCh), 'rb')
-		ft = open('wave{t}.dat'.format(t=self.trigCh), 'rb')
-		eventBra = np.zeros(1, 'I')
-		voltBra = np.zeros(self.points, 'f8')
-		timeBra = np.zeros(self.points, 'f8')
-		self.treeRaw.Branch('event', eventBra, 'event/i')
-		self.treeRaw.Branch('time', timeBra, 'time[{s}]/D'.format(s=self.points))
-		self.treeRaw.Branch('voltageSignal', voltBra, 'voltageSignal[{s}]/D'.format(s=self.points))
-		self.CreateProgressBar(self.meas)
-		self.bar.start()
-		for ev in xrange(self.meas):
-			fs.seek(ev * self.struct_len)
-			ft.seek(ev * self.struct_len)
-			datas = fs.read(self.struct_len)
-			datat = ft.read(self.struct_len)
-			if not datas or not datat:
-				print 'No event in files... exiting'
-				exit()
-			s = struct.Struct(self.struct_fmt).unpack_from(datas)
-			signalADCs = np.array(s, 'H')
-			t = struct.Struct(self.struct_fmt).unpack_from(datat)
-			triggADCs = np.array(t, 'H')
-			signalVolts = np.array(np.multiply(signalADCs, self.sigRes) + self.sig_offset / 50.0 - 1, 'f8')
-			triggVolts = np.array(np.multiply(triggADCs, self.sigRes) + self.trig_offset / 50.0 - 1, 'f8')
-			left, right = np.double(triggVolts[0]), np.double(triggVolts[-1])
-			mid = np.double((left + right) / 2.0)
-			distFromMid = np.array(np.abs(triggVolts - mid), 'f8')
-			midPos = distFromMid.argmin()
-			timeVect = np.linspace(-midPos * self.time_res, self.time_res * (self.points - 1 - midPos), self.points, dtype='f8')
-			eventBra.fill(ev)
-			np.putmask(timeBra, 1 - np.zeros(self.points, '?'), timeVect)
-			np.putmask(voltBra, 1 - np.zeros(self.points, '?'), signalVolts)
-			numFil = self.treeRaw.Fill()
-			self.bar.update(ev + 1)
-		self.bar.finish()
-		self.rawFile.Write()
-		self.rawFile.Close()
-		fs.close()
-		ft.close()
-		t0 = time.time() - t0
-		print 'Time creating root tree:', t0, 'seconds'
+	def GetTriggerValueADCs(self, offset):
+		return int(round(np.divide(self.trigVal + 1 - offset / 50.0, self.sigRes)))
 
 	def MoveBinaryFiles(self):
 		print 'Moving binary files... ', ; sys.stdout.flush()

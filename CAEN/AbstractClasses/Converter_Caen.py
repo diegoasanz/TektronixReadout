@@ -31,8 +31,20 @@ def CreateProgressBar(maxVal=1, bar=None):
 	return bar
 
 
-def LookFor0Time(trigVolts):
-
+def LookForTime0(trigVolts, points, percent_post, time_res, trigVal):
+	guess_pos = int(round(points * (100.0 - percent_post)/100.0))
+	array_points = np.arange(points, dtype='u')
+	condition_trigg = np.array(np.abs(array_points - guess_pos) <= int(round(0.5e-6/time_res)), dtype='?')
+	condition_no_trigg = np.array(1 - condition_trigg, dtype='?')
+	mean = np.extract(condition_no_trigg, trigVolts).mean()
+	sigma = np.extract(condition_no_trigg, trigVolts).std()
+	temp_trig_volts = trigVolts
+	np.putmask(temp_trig_volts, condition_no_trigg, 100)
+	volt_min_pos = temp_trig_volts.argmin()
+	condition_trigg = np.bitwise_and(condition_trigg, np.array(array_points <= volt_min_pos))
+	np.putmask(temp_trig_volts, np.bitwise_not(condition_trigg), 100)
+	position0 = np.abs(temp_trig_volts - trigVal).argmin()
+	return position0
 
 if __name__ == '__main__':
 
@@ -50,7 +62,9 @@ if __name__ == '__main__':
 	trig_offset = float(sys.argv[12])
 	anti_co_offset = float(sys.argv[13])
 	time_res = np.double(sys.argv[14])
-	simultaneous_conversion = bool(sys.argv[15] != '0')
+	post_trig_percent = float(sys.argv[15])
+	trig_value = np.double(sys.argv[16])
+	simultaneous_conversion = bool(sys.argv[17] != '0')
 
 	if simultaneous_conversion:
 		print 'Start creating root file simultaneously with data taking'
@@ -72,8 +86,8 @@ if __name__ == '__main__':
 	raw_tree.Branch('time', timeBra, 'time[{s}]/D'.format(s=points))
 	raw_tree.Branch('voltageSignal', voltBra, 'voltageSignal[{s}]/D'.format(s=points))
 	raw_tree.Branch('voltageTrigger', trigBra, 'voltageTrigger[{s}]/D'.format(s=points))
-	raw_tree.Branch('voltageVeto', vetoBra, 'voltageVeto[{s}]/D'.format(s=points))
-
+	if anti_co_ch != -1:
+		raw_tree.Branch('voltageVeto', vetoBra, 'voltageVeto[{s}]/D'.format(s=points))
 	if not simultaneous_conversion:
 		bar = None
 		bar = CreateProgressBar(num_events, bar)
@@ -85,12 +99,14 @@ if __name__ == '__main__':
 		wait_for_data = True
 		while wait_for_data:
 			if time.time() - t1 > 60:
-				print 'No data has been saved in file for event {ev}... exiting!'.format(ev=ev)
+				print 'No data has been saved in file for event {ev} in the past 60 seconds... exiting!'.format(ev=ev)
 				exit()
 			fs.seek(0, 2)
+			ft.seek(0, 2)
 			signal_written_events = int(round(fs.tell() / struct_len))
 			trigger_written_events = int(round(ft.tell() / struct_len))
 			if anti_co_ch != -1:
+				fa.seek(0, 2)
 				anti_co_written_events = int(round(fa.tell() / struct_len))
 			if signal_written_events + trigger_written_events <= 2 * ev:
 				if anti_co_ch != -1:
@@ -103,12 +119,12 @@ if __name__ == '__main__':
 					if anti_co_written_events > ev:
 						wait_for_data = False
 
-		fs.seek(ev * struct_len)
-		ft.seek(ev * struct_len)
+		fs.seek(ev * struct_len, 0)
+		ft.seek(ev * struct_len, 0)
 		datas = fs.read(struct_len)
 		datat = ft.read(struct_len)
 		if anti_co_ch != -1:
-			fa.seek(ev * struct_len)
+			fa.seek(ev * struct_len, 0)
 			dataa = fa.read(struct_len)
 		if not datas or not datat:
 			print 'No event in signal or trigger files... exiting'
@@ -123,21 +139,30 @@ if __name__ == '__main__':
 		triggADCs = np.array(t, 'H')
 		signalVolts = np.array(np.multiply(signalADCs, adc_res) + sig_offset / 50.0 - 1, 'f8')
 		triggVolts = np.array(np.multiply(triggADCs, adc_res) + trig_offset / 50.0 - 1, 'f8')
-		left, right = np.double(triggVolts[0]), np.double(triggVolts[-1])
-		mid = np.double((left + right) / 2.0)
-		distFromMid = np.array(np.abs(triggVolts - mid), 'f8')
-		midPos = distFromMid.argmin()
-		timeVect = np.linspace(-midPos * self.time_res, self.time_res * (points - 1 - midPos), points,
-		                       dtype='f8')
+		trigPos = LookForTime0(trigVolts=triggVolts, points=points, percent_post=post_trig_percent, time_res=time_res, trigVal=trig_value)
+		timeVect = np.linspace(-trigPos * time_res, time_res * (points - 1 - trigPos), points, dtype='f8')
+		if anti_co_ch != -1:
+			ac = struct.Struct(struct_fmt).unpack_from(dataa)
+			vetoADCs = np.array(ac, 'H')
+			vetoVolts = np.array(np.multiply(vetoADCs, adc_res) + anti_co_offset / 50.0 - 1, 'f8')
+
 		eventBra.fill(ev)
-		np.putmask(timeBra, 1 - np.zeros(points, '?'), timeVect)
-		np.putmask(voltBra, 1 - np.zeros(points, '?'), signalVolts)
+		np.putmask(timeBra, np.bitwise_not(np.zeros(points, '?')), timeVect)
+		np.putmask(voltBra, np.bitwise_not(np.zeros(points, '?')), signalVolts)
+		np.putmask(trigBra, np.bitwise_not(np.zeros(points, '?')), triggVolts)
+		if anti_co_ch != -1:
+			np.putmask(vetoBra, np.bitwise_not(np.zeros(points, '?')), vetoVolts)
 		numFil = raw_tree.Fill()
-		self.bar.update(ev + 1)
-	self.bar.finish()
+		if not simultaneous_conversion:
+			bar.update(ev + 1)
+	if not simultaneous_conversion:
+		bar.finish()
 	raw_file.Write()
 	raw_file.Close()
 	fs.close()
 	ft.close()
+	if anti_co_ch != -1:
+		fa.close()
 	t0 = time.time() - t0
 	print 'Time creating root tree:', t0, 'seconds'
+	exit()

@@ -215,6 +215,7 @@ class CCD_Caen:
 			written_events = self.GetWaveforms(p, self.settings.num_events)
 		t0 = time.time() - t0
 		print 'Time getting {n} events: {t} seconds'.format(n=written_events, t=t0)
+		return written_events
 
 	def TakeTwoWaves(self):
 		t0 = time.time()
@@ -243,111 +244,23 @@ class CCD_Caen:
 		self.CreateRootFile()
 		self.MoveBinaryFiles()
 
-	def SetupDigitiser(self):
-		print 'Creating digitiser CAEN V1730D configuration file... ', ;
-		sys.stdout.flush()
-		rfile = open('{d}/WaveDumpConfig_CCD_cal.txt'.format(d=self.outdir), 'w')
-		rfile.write('[COMMON]')
-		rfile.write('\n\n# open the digitezer')
-		rfile.write('\nOPEN PCI {ol} {n} {ba}'.format(ol=int(self.optlink), n=int(self.node), ba=int(self.vme_b_addr)))
-		rfile.write('\n\n# GNUPLOT path, normally /usr/bin/')
-		rfile.write('\nGNUPLOT_PATH\t"/usr/bin/"')
-		rfile.write('\n\n# output format can be BINARY or ASCII')
-		rfile.write('\nOUTPUT_FILE_FORMAT\tBINARY')
-		rfile.write('\n\n# if OUTPUT_FILE_HEADER is YES, the structure of the event has to be changed in self.struct_fmt to include the header')
-		rfile.write('\nOUTPUT_FILE_HEADER NO')
-		rfile.write('\n\n# specify the amount of samples to save. This defines the event window')
-		rfile.write('\nRECORD_LENGTH\t{p}'.format(p=int(self.points)))
-		rfile.write('\n\n# number of events to save in the file')
-		rfile.write('\nMAX_NUM_EVENTS\t{n}'.format(n=int(self.meas)))
-		rfile.write('\n\nTEST_PATTERN\tNO')
-		rfile.write('\n\nENABLE_DES_MODE\tNO')
-		rfile.write('\n\n# use external trigger. Options are: DISABLED, ACQUISITION_ONLY, ACQUISITION_AND_TRGOUT')
-		rfile.write('\nEXTERNAL_TRIGGER\tDISABLED')
-		rfile.write('\n\n# specify maximum number of events to read out in one Block Transfer. Must be between 1 and 1023')
-		rfile.write('\nMAX_NUM_EVENTS_BLT\t100')
-		rfile.write('\n\n# the percentage of the amount of data stored after the trigger in the event window. Has an offset of ~1.6... only accepts integers')
-		rfile.write('\nPOST_TRIGGER\t{pt}'.format(pt=int(round(self.post_trig_percent*0.9996 - 1.6384))))
-		rfile.write('\n\n# number of events that have to be ready before readout when the IRQ is asserted. 0 means run continuously. 1023 is the maximum')
-		rfile.write('\nUSE_INTERRUPT\t0')
-		rfile.write('\n\n# type of the fornt panel LEMO connectors: NIM, TTL')
-		rfile.write('\n\nFPIO_LEVEL\tNIM')
-		rfile.write('\n\nSKIP_STARTUP_CALIBRATION\tNO')
-		rfile.write('\n\nCHANNEL_TRIGGER\tDISABLED')
-
-		sig_polarity = 'POSITIVE' if self.bias >= 0 else 'NEGATIVE'
-
-		rfile.write('\n\n# configuration for each channel [0] to [7]')
-		for ch in xrange(16):
-			rfile.write('\n\n[{ch}]'.format(ch=ch))
-			if ch == self.sigCh or ch == self.trigCh:
-				rfile.write('\nENABLE_INPUT\tYES')
-			else:
-				rfile.write('\nENABLE_INPUT\tNO')
-			if ch == self.sigCh:
-				rfile.write('\nPULSE_POLARITY\t{sp}'.format(sp=sig_polarity))
-				rfile.write('\nDC_OFFSET\t{o}'.format(o=self.sig_offset))
-				rfile.write('\nCHANNEL_TRIGGER\tDISABLED')
-			if ch == self.trigCh:
-				rfile.write('\nPULSE_POLARITY\tPOSITIVE')
-				rfile.write('\nDC_OFFSET\t{o}'.format(o=self.trig_offset))
-				rfile.write('\nCHANNEL_TRIGGER\tACQUISITION_ONLY')
-				rfile.write('\nTRIGGER_THRESHOLD\t{th}'.format(th=int(round(np.divide(self.trigVal+1-self.trig_offset/50.0, self.sigRes)))))
-		rfile.write('\n')
-		rfile.close()
-		print 'Done'
-
 	def CreateRootFile(self):
-		print 'Start creating root file'
-		t0 = time.time()
-		self.rawFile = ro.TFile('{d}/Runs/{r}.root'.format(d=self.outdir, r=self.filename), 'RECREATE')
-		self.treeRaw = ro.TTree(self.filename, self.filename)
-		fs = open('wave{s}.dat'.format(s=self.sigCh), 'rb')
-		ft = open('wave{t}.dat'.format(t=self.trigCh), 'rb')
-		eventBra = np.zeros(1, 'I')
-		voltBra = np.zeros(self.points, 'f8')
-		timeBra = np.zeros(self.points, 'f8')
-		self.treeRaw.Branch('event', eventBra, 'event/i')
-		self.treeRaw.Branch('time', timeBra, 'time[{s}]/D'.format(s=self.points))
-		self.treeRaw.Branch('voltageSignal', voltBra, 'voltageSignal[{s}]/D'.format(s=self.points))
-		self.CreateProgressBar(self.meas)
-		self.bar.start()
-		for ev in xrange(self.meas):
-			fs.seek(ev * self.struct_len)
-			ft.seek(ev * self.struct_len)
-			datas = fs.read(self.struct_len)
-			datat = ft.read(self.struct_len)
-			if not datas or not datat:
-				print 'No event in files... exiting'
-				exit()
-			s = struct.Struct(self.struct_fmt).unpack_from(datas)
-			signalADCs = np.array(s, 'H')
-			t = struct.Struct(self.struct_fmt).unpack_from(datat)
-			triggADCs = np.array(t, 'H')
-			signalVolts = np.array(np.multiply(signalADCs, self.sigRes) + self.sig_offset / 50.0 - 1, 'f8')
-			triggVolts = np.array(np.multiply(triggADCs, self.sigRes) + self.trig_offset / 50.0 - 1, 'f8')
-			left, right = np.double(triggVolts[0]), np.double(triggVolts[-1])
-			mid = np.double((left + right) / 2.0)
-			distFromMid = np.array(np.abs(triggVolts - mid), 'f8')
-			midPos = distFromMid.argmin()
-			timeVect = np.linspace(-midPos * self.time_res, self.time_res * (self.points - 1 - midPos), self.points, dtype='f8')
-			eventBra.fill(ev)
-			np.putmask(timeBra, 1 - np.zeros(self.points, '?'), timeVect)
-			np.putmask(voltBra, 1 - np.zeros(self.points, '?'), signalVolts)
-			numFil = self.treeRaw.Fill()
-			self.bar.update(ev + 1)
-		self.bar.finish()
-		self.rawFile.Write()
-		self.rawFile.Close()
-		fs.close()
-		ft.close()
-		t0 = time.time() - t0
-		print 'Time creating root tree:', t0, 'seconds'
+		ac_ch = self.anti_co.ch if self.settings.ac_enable else -1
+		ac_offset = self.anti_co.dc_offset_percent if self.settings.ac_enable else -1
+		p = subp.Popen(['python', 'AbstractClasses/Converter_Caen.py', self.settings.outdir, self.settings.filename,
+		                str(self.signal.ch), str(self.trigger.ch), str(ac_ch), str(self.settings.points),
+		                str(self.settings.num_events),str(self.settings.struct_len), self.settings.struct_fmt,
+		                str(self.settings.sigRes), str(self.signal.dc_offset_percent), str(self.trigger.dc_offset_percent),
+		                str(ac_offset), str(self.settings.time_res), str(self.settings.post_trig_percent), str(self.settings.trigVal),
+		                str(int(self.settings.simultaneous_conversion))])
 
 	def MoveBinaryFiles(self):
-		print 'Moving binary files... ', ; sys.stdout.flush()
-		shutil.move('wave{chs}.dat'.format(chs=self.sigCh), '{d}/Runs/{f}_signal.dat'.format(d=self.outdir, f=self.filename))
-		shutil.move('wave{cht}.dat'.format(cht=self.trigCh), '{d}/Runs/{f}_trigger.dat'.format(d=self.outdir, f=self.filename))
+		print 'Moving binary files... ', ;
+		sys.stdout.flush()
+		shutil.move('wave{chs}.dat'.format(chs=self.sigCh),
+		            '{d}/Runs/{f}_signal.dat'.format(d=self.outdir, f=self.filename))
+		shutil.move('wave{cht}.dat'.format(cht=self.trigCh),
+		            '{d}/Runs/{f}_trigger.dat'.format(d=self.outdir, f=self.filename))
 		print 'Done'
 
 	def CreateProgressBar(self, maxVal=1):
@@ -376,7 +289,8 @@ if __name__ == '__main__':
 	verb = bool(options.verb)
 	ccd = CCD_Caen(infile, verb)
 	ccd.GetBaseLines()
-	ccd.GetData()
+	written_events = ccd.GetData()
+	ccd.settings.num_events = written_events
 	if auto:
 		ccd.CreateRootFile()
 
