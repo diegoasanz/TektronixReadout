@@ -35,7 +35,7 @@ class CCD_Caen:
 		self.trigger.Set_Channel(self.settings)
 		self.anti_co = None
 		if self.settings.ac_enable:
-			self.anti_co = Channel_Caen(self.settings.acCh, 'anti_coincidence', self.verb)
+			self.anti_co = Channel_Caen(self.settings.acCh, 'veto', self.verb)
 			self.anti_co.Set_Channel(self.settings)
 
 		# TODO LO QUE SIGUE DEBE SER BORRADO

@@ -37,7 +37,7 @@ class Channel_Caen:
 			self.thr_counts = settings.trig_thr_counts
 			self.Calculate_DC_Offset_Percentage(settings)
 			self.edge = -1
-		elif self.type == 'anti_coincidence':
+		elif self.type == 'veto':
 			self.base_line_u_adcs = np.divide(settings.ac_base_line_guess, settings.sigRes, 'f8')
 			self.thr_counts = settings.ac_thr_counts
 			self.Calculate_DC_Offset_Percentage(settings)

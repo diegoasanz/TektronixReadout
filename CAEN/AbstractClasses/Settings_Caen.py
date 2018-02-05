@@ -23,19 +23,36 @@ class Settings_Caen:
 		self.optlink = 1
 		self.node = 0
 		self.vme_b_addr = 32100000
-		self.sigCh = 0
-		self.trigCh = 1
-		self.acCh = 2
 		self.points = 2560
-		self.time_res = 2e-9
 		self.post_trig_percent = 90
 		self.num_events = 10
+		self.time_calib = 300
 		self.bias = 0
-		self.outdir = '.'
-		self.prefix = 'wave'
-		self.suffix = 'default'
 		self.input_range = 2.15
-		self.sigRes = np.double(np.divide(np.double(self.in_range), (np.power(2.0, 14.0, dtype='f8') - 1)))
+		self.calib_path = ''
+		self.simultaneous_conversion = False
+		self.time_res = 2e-9
+		self.sigCh = 0
+		self.trigCh = 1
+		self.trig_base_line = -0.08
+		self.trig_thr_counts = 35
+		self.ac_enable = False
+		self.acCh = 2
+		self.ac_base_line = -0.08
+		self.ac_thr_counts = 15
+		self.outdir = '.'
+		self.prefix = 'waves'
+		self.suffix = 'default'
+		self.sigRes = 0
+		self.UpdateSignalResolution()
+		self.filename = ''
+
+		self.fit_signal_vcal_params = np.array([-1.21888705e-04, -8.96215025e-01], dtype='f8')
+		self.fit_signal_vcal_params_errors = np.array([0.0001923, 0.00559264], dtype='f8')
+		self.fit_charge_signal_params = np.array([-1.65417060e+01, -1.35735246e+05], dtype='f8')
+		self.fit_charge_signal_params_errors = np.array([26.10228586,  847.0342207], dtype='f8')
+		self.fit_vcal_signal_params, self.fit_vcal_signal_params_errors = None, None
+		self.UpdateVcalVsSignal()
 
 		self.bar = None
 
@@ -45,6 +62,7 @@ class Settings_Caen:
 			if os.path.isfile(self.infile):
 				print 'Reading input file: {f} ...'.format(f=self.infile)
 				parser.read(self.infile)
+
 				if parser.has_section('OPTILINK'):
 					if parser.has_option('OPTILINK', 'link'):
 						self.optlink = parser.getint('OPTILINK', 'link')
@@ -52,6 +70,7 @@ class Settings_Caen:
 						self.node = parser.getint('OPTILINK', 'node')
 					if parser.has_option('OPTILINK', 'vme_base_address'):
 						self.vme_b_addr = parser.getint('OPTILINK', 'vme_base_address')
+
 				if parser.has_section('RUN'):
 					if parser.has_option('RUN', 'time'):
 						self.points = int(np.ceil(parser.getfloat('RUN', 'time') * 1e-6 / self.time_res))
@@ -80,7 +99,7 @@ class Settings_Caen:
 					if parser.has_option('TRIGGER', 'base_line'):
 						self.trig_base_line = parser.getfloat('TRIGGER', 'base_line')
 					if parser.has_option('TRIGGER', 'thr_counts'):
-						self.trigVal = parser.getint('TRIGGER', 'thr_counts')
+						self.trig_thr_counts = parser.getint('TRIGGER', 'thr_counts')
 
 				if parser.has_section('ANTICOINCIDENCE'):
 					if parser.has_option('ANTICOINCIDENCE', 'channel'):
@@ -98,36 +117,43 @@ class Settings_Caen:
 						self.prefix = parser.get('OUTPUT', 'prefix')
 					if parser.has_option('OUTPUT', 'suffix'):
 						self.suffix = parser.get('OUTPUT', 'suffix')
-			else:
-				print 'Input file {f} does not exist. Loading default values...'.format(f=self.infile)
-				self.LoadDefaults()
+				self.UpdateSignalResolution()
+
+	def UpdateSignalResolution(self):
+		self.sigRes = np.double(np.divide(np.double(self.input_range), (np.power(2.0, 14.0, dtype='f8') - 1)))
+
+	def Get_Calibration_Constants(self):
+		if self.calib_path == '':
+			pass
 		else:
-			self.LoadDefaults()
+			if os.path.isfile(self.calib_path):
+				tempf = ro.TFile(self.calib_path, 'READ')
+				fit_signal_vcal = tempf.Get('TFitResult-Signal_vs_Vcal-sig_vcal_fit')
+				fit_charge_signal = tempf.Get('TFitResult-Charge_vs_Signal-q_sig_fit')
+				self.fit_signal_vcal_params = np.array(fit_signal_vcal.Parameters(), dtype='f8')
+				self.fit_charge_signal_params = np.array(fit_charge_signal.Parameters(), dtype='f8')
+				self.UpdateVcalVsSignal()
 
-	def LoadDefaults(self):
-		self.optlink = 1
-		self.node = 0
-		self.vme_b_addr = 32100000
-		self.sigCh = 3 if self.sigCh == -1 else self.sigCh
-		self.trigCh = 7 if self.trigCh == -1 else self.trigCh
-		self.trigVal = 0.7138
-		self.points = 5000
-		self.post_trig_percent = 90
+	def UpdateVcalVsSignal(self):
+		self.fit_vcal_signal_params = np.array([np.divide(-self.fit_signal_vcal_params[0], self.fit_signal_vcal_params[1], dtype='f8'),
+		                                         np.divide(1.0, self.fit_signal_vcal_params[1], dtype='f8')], dtype='f8')
+		self.fit_vcal_signal_params_errors = np.array([np.sqrt((self.fit_signal_vcal_params_errors[0] / self.fit_signal_vcal_params[1])**2 + (self.fit_signal_vcal_params[0] * self.fit_signal_vcal_params_errors[1] / (self.fit_signal_vcal_params[1] ** 2))**2)], dtype='f8')
 
-	def SetOutputFilesNames(self):
-		if not os.path.isdir('{dir}/Runs'.format(dir=self.outdir)):
-			os.makedirs('{dir}/Runs'.format(dir=self.outdir))
+	def SetOutputFiles(self):
+		if not os.path.isdir(self.outdir):
+			os.makedirs(self.outdir)
+		if not os.path.isdir('{d}/Runs'.format(d=self.outdir)):
+			os.makedirs(self.outdir)
 
 		def AddSuffix(string1):
-			string1 += '_Input' if self.calv else '_Output'
 			string1 += '_Pos' if self.bias >= 0 else '_Neg'
-			string1 += '_{b}mV'.format(b=abs(1000 * self.bias))
-			string1 += self.suffix
+			string1 += '_{b}V'.format(b=abs(self.bias))
+			if self.suffix != '':
+				string1 += '_{s}'.format(s=self.suffix)
 			return string1
 
-		self.outString3 = '{p}_{f}'.format(dir=self.outdir, p=self.prefix, f=self.filename)
-		self.outString3 = AddSuffix(self.outString3)
-		self.filename = self.outString3
+		self.filename = '{p}_ccd'.format(p=self.prefix)
+		self.filename = AddSuffix(self.filename)
 
 	def Delay(self, ti=1.0):
 		t0 = time.time()
@@ -203,7 +229,7 @@ class Settings_Caen:
 		print 'Done'
 
 	def GetTriggerValueADCs(self, offset):
-		return int(round(np.divide(self.trigVal + 1 - offset / 50.0, self.sigRes)))
+		return int(round(np.divide(self.trig_thr_counts + 1 - offset / 50.0, self.sigRes)))
 
 	def MoveBinaryFiles(self):
 		print 'Moving binary files... ', ; sys.stdout.flush()
