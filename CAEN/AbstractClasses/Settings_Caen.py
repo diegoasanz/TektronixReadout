@@ -23,6 +23,7 @@ class Settings_Caen:
 		self.optlink = 1
 		self.node = 0
 		self.vme_b_addr = 32100000
+		self.dig_bits = 14
 		self.points = 2560
 		self.post_trig_percent = 90
 		self.num_events = 10
@@ -53,6 +54,9 @@ class Settings_Caen:
 		self.fit_charge_signal_params_errors = np.array([26.10228586,  847.0342207], dtype='f8')
 		self.fit_vcal_signal_params, self.fit_vcal_signal_params_errors = None, None
 		self.UpdateVcalVsSignal()
+
+		self.struct_fmt = '@{p}H'.format(p=self.points)
+		self.struct_len = struct.calcsize(self.struct_fmt)
 
 		self.bar = None
 
@@ -163,7 +167,10 @@ class Settings_Caen:
 
 	def SetupDigitiser(self, doBaseLines=False, signal=None, trigger=None, ac=None, events_written=0):
 		print 'Creating digitiser CAEN V1730D configuration file... ', ; sys.stdout.flush()
-		rfile = open('{d}/WaveDumpConfig_CCD_cal.txt'.format(d=self.outdir), 'w')
+		if doBaseLines:
+			rfile = open('{d}/WaveDumpConfig_CCD_BL.txt'.format(d=self.outdir), 'w')
+		else:
+			rfile = open('{d}/WaveDumpConfig_CCD.txt'.format(d=self.outdir), 'w')
 		rfile.write('[COMMON]')
 		rfile.write('\n\n# open the digitezer')
 		rfile.write('\nOPEN PCI {ol} {n} {ba}'.format(ol=int(self.optlink), n=int(self.node), ba=int(self.vme_b_addr)))
@@ -195,7 +202,7 @@ class Settings_Caen:
 		rfile.write('\n\nSKIP_STARTUP_CALIBRATION\tNO')
 		rfile.write('\n\nCHANNEL_TRIGGER\tDISABLED')
 
-		sig_polarity = 'POSITIVE' if self.bias >= 0 else 'NEGATIVE'
+		sig_polarity = 'POSITIVE' if self.bias < 0 else 'NEGATIVE'
 
 		rfile.write('\n\n# configuration for each channel [0] to [16], although it only has 8 channels ;)')
 		for ch in xrange(16):
@@ -227,6 +234,9 @@ class Settings_Caen:
 		rfile.write('\n')
 		rfile.close()
 		print 'Done'
+
+	def ADC_to_Volts(self, adcs, channel):
+		return channel.ADC_to_Volts(adcs, self.sigRes)
 
 	def GetTriggerValueADCs(self, offset):
 		return int(round(np.divide(self.trig_thr_counts + 1 - offset / 50.0, self.sigRes)))

@@ -197,15 +197,17 @@ class CCD_Caen:
 				condition_ac = (np.abs(acADCs - mean_ac) < 3 * std_ac)
 				mean_ac = np.extract(condition_ac, acADCs).mean()
 				std_ac = np.extract(condition_ac, acADCs).std()
-		self.trigger.Correct_Base_Line(mean_volts=self.settings.ADC_to_Volts(mean_t), settings=self.settings)
+		self.trigger.Correct_Base_Line(mean_volts=self.settings.ADC_to_Volts(mean_t, self.trigger), settings=self.settings)
 		if self.settings.ac_enable:
-			self.anti_co.Correct_Base_Line(mean_volts=self.settings.ADC_to_Volts(mean_ac), settings=self.settings)
+			self.anti_co.Correct_Base_Line(mean_volts=self.settings.ADC_to_Volts(mean_ac, self.anti_co), settings=self.settings)
 
 	def GetData(self):
 		t0 = time.time()
 		self.CreateEmptyFiles()
 		written_events = 0
 		print 'Getting {n} events...'.format(n=self.settings.num_events)
+		if self.settings.simultaneous_conversion:
+			self.CreateRootFile()
 		while written_events < self.settings.num_events:
 			if self.settings.ac_enable:
 				self.settings.SetupDigitiser(doBaseLines=False, signal=self.signal, trigger=self.trigger, ac=self.anti_co, events_written=written_events)
@@ -291,7 +293,7 @@ if __name__ == '__main__':
 	ccd.GetBaseLines()
 	written_events = ccd.GetData()
 	ccd.settings.num_events = written_events
-	if auto:
+	if auto and not ccd.settings.simultaneous_conversion:
 		ccd.CreateRootFile()
 
 	ccd.SetOutputFilesNames()

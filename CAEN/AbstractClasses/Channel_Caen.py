@@ -56,5 +56,8 @@ class Channel_Caen:
 		self.base_line_u_adcs = self.Calculate_Universal_ADCs(mean_volts, settings.sigRes)
 		self.Calculate_DC_Offset_Percentage(settings)
 
+	def ADC_to_Volts(self, adcs, sigres):
+		return np.multiply(sigres, np.add(adcs, np.multiply(2**14 - 1, self.dc_offset_percent/100.0 - 0.5, dtype='f8'), dtype='f8'), dtype='f8')
+
 if __name__ == '__main__':
 	print 'bla'
