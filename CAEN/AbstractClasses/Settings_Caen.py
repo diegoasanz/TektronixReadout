@@ -147,7 +147,7 @@ class Settings_Caen:
 		if not os.path.isdir(self.outdir):
 			os.makedirs(self.outdir)
 		if not os.path.isdir('{d}/Runs'.format(d=self.outdir)):
-			os.makedirs(self.outdir)
+			os.makedirs('{d}/Runs'.format(d=self.outdir))
 
 		def AddSuffix(string1):
 			string1 += '_Pos' if self.bias >= 0 else '_Neg'
@@ -197,7 +197,7 @@ class Settings_Caen:
 		rfile.write('\nPOST_TRIGGER\t{pt}'.format(pt=int(round(self.post_trig_percent*0.9996 - 1.6384))))
 		rfile.write('\n\n# number of events that have to be ready before readout when the IRQ is asserted. 0 means run continuously. 1023 is the maximum')
 		rfile.write('\nUSE_INTERRUPT\t0')
-		rfile.write('\n\n# type of the fornt panel LEMO connectors: NIM, TTL')
+		rfile.write('\n\n# type of the front panel LEMO connectors: NIM, TTL')
 		rfile.write('\n\nFPIO_LEVEL\tNIM')
 		rfile.write('\n\nSKIP_STARTUP_CALIBRATION\tNO')
 		rfile.write('\n\nCHANNEL_TRIGGER\tDISABLED')
@@ -212,6 +212,8 @@ class Settings_Caen:
 			elif not not ac:
 				if ch == ac.ch:
 					rfile.write('\nENABLE_INPUT\tYES')
+				else:
+					rfile.write('\nENABLE_INPUT\tNO')
 			else:
 				rfile.write('\nENABLE_INPUT\tNO')
 			if ch == signal.ch:
@@ -243,8 +245,10 @@ class Settings_Caen:
 
 	def MoveBinaryFiles(self):
 		print 'Moving binary files... ', ; sys.stdout.flush()
-		shutil.move('wave{chs}.dat'.format(chs=self.sigCh), '{d}/Runs/{f}_signal.dat'.format(d=self.outdir, f=self.filename))
-		shutil.move('wave{cht}.dat'.format(cht=self.trigCh), '{d}/Runs/{f}_trigger.dat'.format(d=self.outdir, f=self.filename))
+		shutil.move('raw_wave{chs}.dat'.format(chs=self.sigCh), '{d}/Runs/{f}_signal.dat'.format(d=self.outdir, f=self.filename))
+		shutil.move('raw_wave{cht}.dat'.format(cht=self.trigCh), '{d}/Runs/{f}_trigger.dat'.format(d=self.outdir, f=self.filename))
+		if self.ac_enable:
+			shutil.move('raw_wave{cha}.dat'.format(cht=self.acCh), '{d}/Runs/{f}_veto.dat'.format(d=self.outdir, f=self.filename))
 		print 'Done'
 
 	def CreateProgressBar(self, maxVal=1):

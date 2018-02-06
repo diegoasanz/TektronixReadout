@@ -139,7 +139,7 @@ class CCD_Caen:
 			p.stdin.write('s')
 			p.stdin.flush()
 			while p.poll() is None:
-				if time.time() - t1 <= self.settings.time_calib:
+				if time.time() - t1 >= self.settings.time_calib:
 					p.stdin.write('s')
 					p.stdin.flush()
 					p.stdin.write('c')
@@ -177,7 +177,7 @@ class CCD_Caen:
 		ft = open('raw_wave{t}.dat'.format(t=self.trigger.ch), 'rb')
 		ft.seek(0)
 		data_t = ft.read(self.settings.struct_len)
-		t = struct.Struct(self.settings.struct_fmt).unpack_form(data_t)
+		t = struct.Struct(self.settings.struct_fmt).unpack_from(data_t)
 		triggADCs = np.array(t, 'H')
 		mean_t = triggADCs.mean()
 		std_t = triggADCs.std()
@@ -295,9 +295,10 @@ if __name__ == '__main__':
 	ccd.settings.num_events = written_events
 	if auto and not ccd.settings.simultaneous_conversion:
 		ccd.CreateRootFile()
+		ccd.settings.MoveBinaryFiles()
 
-	ccd.SetOutputFilesNames()
-	ccd.TakeTwoWaves()
+	# ccd.SetOutputFilesNames()
+	# ccd.TakeTwoWaves()
 	print 'Finished :)'
 	sys.stdout.write('\a\a\a')
 	sys.stdout.flush()

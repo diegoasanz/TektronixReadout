@@ -33,12 +33,12 @@ class Channel_Caen:
 			self.edge = -int(settings.bias/abs(settings.bias))
 			self.Calculate_DC_Offset_Percentage(settings)
 		elif self.type == 'trigger':
-			self.base_line_u_adcs = self.Calculate_Universal_ADCs(settings.trig_base_line_guess, settings.sigRes)
+			self.base_line_u_adcs = self.Calculate_Universal_ADCs(settings.trig_base_line, settings.sigRes)
 			self.thr_counts = settings.trig_thr_counts
 			self.Calculate_DC_Offset_Percentage(settings)
 			self.edge = -1
 		elif self.type == 'veto':
-			self.base_line_u_adcs = np.divide(settings.ac_base_line_guess, settings.sigRes, 'f8')
+			self.base_line_u_adcs = self.Calculate_Universal_ADCs(settings.ac_base_line, settings.sigRes)
 			self.thr_counts = settings.ac_thr_counts
 			self.Calculate_DC_Offset_Percentage(settings)
 			self.edge = -1
@@ -50,7 +50,7 @@ class Channel_Caen:
 			self.dc_offset_percent = round(100 * np.divide(3 * self.thr_counts + self.base_line_u_adcs, 2.0**settings.dig_bits - 1.0, dtype='f8') - 50)
 
 	def Calculate_Universal_ADCs(self, value_volts, sig_res):
-		return np.divide(value_volts, sig_res, 'f8')
+		return np.divide(value_volts, sig_res, dtype='f8')
 
 	def Correct_Base_Line(self, mean_volts, settings):
 		self.base_line_u_adcs = self.Calculate_Universal_ADCs(mean_volts, settings.sigRes)
