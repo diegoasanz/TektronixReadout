@@ -13,6 +13,7 @@ import subprocess as subp
 import struct
 import ROOT as ro
 import shutil
+from copy import deepcopy
 
 
 # from DataAcquisition import DataAcquisition
@@ -33,12 +34,12 @@ def CreateProgressBar(maxVal=1, bar=None):
 
 def LookForTime0(trigVolts, points, percent_post, time_res, trigVal):
 	guess_pos = int(round(points * (100.0 - percent_post)/100.0))
-	array_points = np.arange(points, dtype='u')
+	array_points = np.arange(points, dtype=np.dtype('uint32'))
 	condition_trigg = np.array(np.abs(array_points - guess_pos) <= int(round(0.5e-6/time_res)), dtype='?')
 	condition_no_trigg = np.array(1 - condition_trigg, dtype='?')
 	mean = np.extract(condition_no_trigg, trigVolts).mean()
 	sigma = np.extract(condition_no_trigg, trigVolts).std()
-	temp_trig_volts = trigVolts
+	temp_trig_volts = deepcopy(trigVolts)
 	np.putmask(temp_trig_volts, condition_no_trigg, 100)
 	volt_min_pos = temp_trig_volts.argmin()
 	condition_trigg = np.bitwise_and(condition_trigg, np.array(array_points <= volt_min_pos))
@@ -46,8 +47,10 @@ def LookForTime0(trigVolts, points, percent_post, time_res, trigVal):
 	position0 = np.abs(temp_trig_volts - trigVal).argmin()
 	return position0
 
-if __name__ == '__main__':
+def ADC_to_Volts(adcs, sigres, nbits, offset_p):
+	return np.multiply(sigres, np.add(adcs, np.multiply(2 ** nbits - 1, offset_p / 100.0 - 0.5, dtype='f8'), dtype='f8'), dtype='f8')
 
+if __name__ == '__main__':
 	run_dir_location = str(sys.argv[1])
 	working_dir_location = str(sys.argv[2])
 	filename = str(sys.argv[3])
@@ -65,19 +68,18 @@ if __name__ == '__main__':
 	time_res = np.double(sys.argv[15])
 	post_trig_percent = float(sys.argv[16])
 	trig_value = np.double(sys.argv[17])
-	simultaneous_conversion = bool(sys.argv[18] != '0')
+	dig_bits = np.int(sys.argv[18])
+	simultaneous_conversion = bool(sys.argv[19] != '0')
 
 	if simultaneous_conversion:
 		print 'Start creating root file simultaneously with data taking'
 	else:
+		print str(sys.argv)
 		print 'Start creating root file'
 	t0 = time.time()
 	raw_file = ro.TFile('{wd}/{d}/Runs/{r}.root'.format(wd=working_dir_location, d=run_dir_location, r=filename), 'RECREATE')
 	raw_tree = ro.TTree(filename, filename)
-	fs = open('{wd}/raw_wave{s}.dat'.format(wd=working_dir_location, s=signal_ch), 'rb')
-	ft = open('{wd}/raw_wave{t}.dat'.format(wd=working_dir_location, t=trigger_ch), 'rb')
 	if anti_co_ch != -1:
-		fa = open('{wd}/raw_wave{a}.dat'.format(wd=working_dir_location, a=anti_co_ch), 'rb')
 		vetoBra = np.zeros(points, 'f8')
 	eventBra = np.zeros(1, 'I')
 	voltBra = np.zeros(points, 'f8')
@@ -94,35 +96,45 @@ if __name__ == '__main__':
 		bar = CreateProgressBar(num_events, bar)
 		bar.start()
 
+	fs = open('{wd}/raw_wave{s}.dat'.format(wd=working_dir_location, s=signal_ch), 'rb')
+	ft = open('{wd}/raw_wave{t}.dat'.format(wd=working_dir_location, t=trigger_ch), 'rb')
+	if anti_co_ch != -1:
+		fa = open('{wd}/raw_wave{a}.dat'.format(wd=working_dir_location, a=anti_co_ch), 'rb')
+
 	for ev in xrange(num_events):
 		t1 = time.time()
 
 		wait_for_data = True
+
 		while wait_for_data:
-			if time.time() - t1 > 60:
-				print 'No data has been saved in file for event {ev} in the past 60 seconds... exiting!'.format(ev=ev)
+			if time.time() - t1 > 10:
+				print 'No data has been saved in file for event {ev} in the past 10 seconds... exiting!'.format(ev=ev)
 				exit()
-			fs.seek(0, 2)
-			ft.seek(0, 2)
-			signal_written_events = int(round(fs.tell() / struct_len))
-			trigger_written_events = int(round(ft.tell() / struct_len))
+			signal_written_events = int(round(os.path.getsize('{d}/raw_wave{s}.dat'.format(d=working_dir_location, s=signal_ch)) / struct_len))
+			trigger_written_events = int(round(os.path.getsize('{d}/raw_wave{t}.dat'.format(d=working_dir_location, t=trigger_ch)) / struct_len))
 			if anti_co_ch != -1:
-				fa.seek(0, 2)
-				anti_co_written_events = int(round(fa.tell() / struct_len))
+				anti_co_written_events = int(round(os.path.getsize('{d}/raw_wave{a}.dat'.format(d=working_dir_location, a=anti_co_ch)) / struct_len))
 			if signal_written_events + trigger_written_events <= 2 * ev:
 				if anti_co_ch != -1:
 					if anti_co_written_events <= ev:
-						pass
+						fs.close()
+						ft.close()
+						fa.close()
 				else:
-					pass
+					fs.close()
+					ft.close()
 			else:
+				fs = open('{wd}/raw_wave{s}.dat'.format(wd=working_dir_location, s=signal_ch), 'rb')
+				ft = open('{wd}/raw_wave{t}.dat'.format(wd=working_dir_location, t=trigger_ch), 'rb')
 				if anti_co_ch != -1:
 					if anti_co_written_events > ev:
 						wait_for_data = False
-
+						fa = open('{wd}/raw_wave{a}.dat'.format(wd=working_dir_location, a=anti_co_ch), 'rb')
+				else:
+					wait_for_data = False
 		fs.seek(ev * struct_len, 0)
-		ft.seek(ev * struct_len, 0)
 		datas = fs.read(struct_len)
+		ft.seek(ev * struct_len, 0)
 		datat = ft.read(struct_len)
 		if anti_co_ch != -1:
 			fa.seek(ev * struct_len, 0)
@@ -136,16 +148,16 @@ if __name__ == '__main__':
 
 		s = struct.Struct(struct_fmt).unpack_from(datas)
 		signalADCs = np.array(s, 'H')
+		signalVolts = ADC_to_Volts(signalADCs, adc_res, dig_bits, sig_offset)
 		t = struct.Struct(struct_fmt).unpack_from(datat)
 		triggADCs = np.array(t, 'H')
-		signalVolts = np.array(np.multiply(signalADCs, adc_res) + sig_offset / 50.0 - 1, 'f8')
-		triggVolts = np.array(np.multiply(triggADCs, adc_res) + trig_offset / 50.0 - 1, 'f8')
+		triggVolts = ADC_to_Volts(triggADCs, adc_res, dig_bits, trig_offset)
 		trigPos = LookForTime0(trigVolts=triggVolts, points=points, percent_post=post_trig_percent, time_res=time_res, trigVal=trig_value)
 		timeVect = np.linspace(-trigPos * time_res, time_res * (points - 1 - trigPos), points, dtype='f8')
 		if anti_co_ch != -1:
 			ac = struct.Struct(struct_fmt).unpack_from(dataa)
 			vetoADCs = np.array(ac, 'H')
-			vetoVolts = np.array(np.multiply(vetoADCs, adc_res) + anti_co_offset / 50.0 - 1, 'f8')
+			vetoVolts = ADC_to_Volts(vetoADCs, adc_res, dig_bits, anti_co_offset)
 
 		eventBra.fill(ev)
 		np.putmask(timeBra, np.bitwise_not(np.zeros(points, '?')), timeVect)

@@ -238,7 +238,7 @@ class Settings_Caen:
 		print 'Done'
 
 	def ADC_to_Volts(self, adcs, channel):
-		return channel.ADC_to_Volts(adcs, self.sigRes)
+		return channel.ADC_to_Volts(adcs, self.sigRes, self.dig_bits)
 
 	def GetTriggerValueADCs(self, channel):
 		return int(round(channel.base_line_u_adcs - channel.thr_counts - (2.0**self.dig_bits - 1) * (channel.dc_offset_percent/100.0 - 0.5)))
@@ -249,6 +249,12 @@ class Settings_Caen:
 		shutil.move('raw_wave{cht}.dat'.format(cht=self.trigCh), '{d}/Runs/{f}_trigger.dat'.format(d=self.outdir, f=self.filename))
 		if self.ac_enable:
 			shutil.move('raw_wave{cha}.dat'.format(cha=self.acCh), '{d}/Runs/{f}_veto.dat'.format(d=self.outdir, f=self.filename))
+
+		os.remove('wave{s}.dat'.format(s=self.sigCh))
+		os.remove('wave{t}.dat'.format(t=self.trigCh))
+		if self.ac_enable:
+			os.remove('wave{a}.dat'.format(a=self.acCh))
+
 		print 'Done'
 
 	def CreateProgressBar(self, maxVal=1):

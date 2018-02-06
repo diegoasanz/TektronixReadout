@@ -219,29 +219,22 @@ class CCD_Caen:
 			written_events = self.GetWaveforms(p, self.settings.num_events)
 		t0 = time.time() - t0
 		print 'Time getting {n} events: {t} seconds'.format(n=written_events, t=t0)
+		if self.settings.simultaneous_conversion:
+			while pconv.poll() is None:
+				continue
 		return written_events
 
 	def CreateRootFile(self):
 		ac_ch = self.anti_co.ch if self.settings.ac_enable else -1
 		ac_offset = self.anti_co.dc_offset_percent if self.settings.ac_enable else -1
 		trig_th_in_volts = self.settings.ADC_to_Volts(self.settings.GetTriggerValueADCs(self.trigger), self.trigger)
-		print trig_th_in_volts
 		p = subp.Popen(['python', 'AbstractClasses/Converter_Caen.py', self.settings.outdir, os.getcwd(), self.settings.filename,
 		                str(self.signal.ch), str(self.trigger.ch), str(ac_ch), str(self.settings.points),
 		                str(self.settings.num_events),str(self.settings.struct_len), self.settings.struct_fmt,
 		                str(self.settings.sigRes), str(self.signal.dc_offset_percent), str(self.trigger.dc_offset_percent),
 		                str(ac_offset), str(self.settings.time_res), str(self.settings.post_trig_percent), str(trig_th_in_volts),
-		                str(int(self.settings.simultaneous_conversion))])
+		                str(self.settings.dig_bits), str(int(self.settings.simultaneous_conversion))])
 		return p
-
-	def MoveBinaryFiles(self):
-		print 'Moving binary files... ', ;
-		sys.stdout.flush()
-		shutil.move('wave{chs}.dat'.format(chs=self.sigCh),
-		            '{d}/Runs/{f}_signal.dat'.format(d=self.outdir, f=self.filename))
-		shutil.move('wave{cht}.dat'.format(cht=self.trigCh),
-		            '{d}/Runs/{f}_trigger.dat'.format(d=self.outdir, f=self.filename))
-		print 'Done'
 
 	def CreateProgressBar(self, maxVal=1):
 		widgets = [
