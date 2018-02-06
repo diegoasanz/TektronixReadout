@@ -265,9 +265,10 @@ if __name__ == '__main__':
 	written_events = ccd.GetData()
 	ccd.settings.num_events = written_events
 	if auto and not ccd.settings.simultaneous_conversion:
-		pconv = ccd.CreateRootFile()
-		while pconv.poll() is None:
-			continue
+		if not ccd.settings.simultaneous_conversion:
+			pconv = ccd.CreateRootFile()
+			while pconv.poll() is None:
+				continue
 		ccd.settings.MoveBinaryFiles()
 
 	# ccd.SetOutputFilesNames()
