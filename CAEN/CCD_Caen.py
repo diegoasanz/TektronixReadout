@@ -11,6 +11,7 @@ from optparse import OptionParser
 import ROOT as ro
 import numpy as np
 import progressbar
+import ipdb
 
 from AbstractClasses.Channel_Caen import Channel_Caen
 from AbstractClasses.Settings_Caen import Settings_Caen
@@ -197,6 +198,7 @@ class CCD_Caen:
 				condition_ac = (np.abs(acADCs - mean_ac) < 3 * std_ac)
 				mean_ac = np.extract(condition_ac, acADCs).mean()
 				std_ac = np.extract(condition_ac, acADCs).std()
+				# ipdb.set_trace(context=5)
 		self.trigger.Correct_Base_Line(mean_volts=self.settings.ADC_to_Volts(mean_t, self.trigger), settings=self.settings)
 		if self.settings.ac_enable:
 			self.anti_co.Correct_Base_Line(mean_volts=self.settings.ADC_to_Volts(mean_ac, self.anti_co), settings=self.settings)
@@ -207,7 +209,7 @@ class CCD_Caen:
 		written_events = 0
 		print 'Getting {n} events...'.format(n=self.settings.num_events)
 		if self.settings.simultaneous_conversion:
-			self.CreateRootFile()
+			pconv = self.CreateRootFile()
 		while written_events < self.settings.num_events:
 			if self.settings.ac_enable:
 				self.settings.SetupDigitiser(doBaseLines=False, signal=self.signal, trigger=self.trigger, ac=self.anti_co, events_written=written_events)
@@ -219,42 +221,18 @@ class CCD_Caen:
 		print 'Time getting {n} events: {t} seconds'.format(n=written_events, t=t0)
 		return written_events
 
-	def TakeTwoWaves(self):
-		t0 = time.time()
-		self.SetupDigitiser()
-		print 'Starting getting data using wavedump...'
-		p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD_cal.txt'.format(d=self.outdir)], bufsize=-1,
-		               stdin=subp.PIPE)
-		t1 = time.time()
-		# while p.poll() is None:
-		self.Delay(4)
-		p.stdin.write('c')
-		p.stdin.flush()
-		self.Delay(1.5)
-		p.stdin.write('W')
-		p.stdin.flush()
-		self.Delay(1.5)
-		p.stdin.write('P')
-		p.stdin.flush()
-		self.Delay(1.5)
-		p.stdin.write('s')
-		p.stdin.flush()
-		while p.poll() is None:
-			continue
-		t0 = time.time() - t0
-		print 'Total time saving {m} events:'.format(m=self.meas), t0, 'seconds'
-		self.CreateRootFile()
-		self.MoveBinaryFiles()
-
 	def CreateRootFile(self):
 		ac_ch = self.anti_co.ch if self.settings.ac_enable else -1
 		ac_offset = self.anti_co.dc_offset_percent if self.settings.ac_enable else -1
-		p = subp.Popen(['python', 'AbstractClasses/Converter_Caen.py', self.settings.outdir, self.settings.filename,
+		trig_th_in_volts = self.settings.ADC_to_Volts(self.settings.GetTriggerValueADCs(self.trigger), self.trigger)
+		print trig_th_in_volts
+		p = subp.Popen(['python', 'AbstractClasses/Converter_Caen.py', self.settings.outdir, os.getcwd(), self.settings.filename,
 		                str(self.signal.ch), str(self.trigger.ch), str(ac_ch), str(self.settings.points),
 		                str(self.settings.num_events),str(self.settings.struct_len), self.settings.struct_fmt,
 		                str(self.settings.sigRes), str(self.signal.dc_offset_percent), str(self.trigger.dc_offset_percent),
-		                str(ac_offset), str(self.settings.time_res), str(self.settings.post_trig_percent), str(self.settings.trigVal),
+		                str(ac_offset), str(self.settings.time_res), str(self.settings.post_trig_percent), str(trig_th_in_volts),
 		                str(int(self.settings.simultaneous_conversion))])
+		return p
 
 	def MoveBinaryFiles(self):
 		print 'Moving binary files... ', ;
@@ -294,7 +272,9 @@ if __name__ == '__main__':
 	written_events = ccd.GetData()
 	ccd.settings.num_events = written_events
 	if auto and not ccd.settings.simultaneous_conversion:
-		ccd.CreateRootFile()
+		pconv = ccd.CreateRootFile()
+		while pconv.poll() is None:
+			continue
 		ccd.settings.MoveBinaryFiles()
 
 	# ccd.SetOutputFilesNames()

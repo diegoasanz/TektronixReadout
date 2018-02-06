@@ -227,7 +227,7 @@ class Settings_Caen:
 					rfile.write('\nCHANNEL_TRIGGER\tDISABLED')
 				else:
 					rfile.write('\nCHANNEL_TRIGGER\tACQUISITION_ONLY')
-					rfile.write('\nTRIGGER_THRESHOLD\t{th}'.format(th=self.GetTriggerValueADCs(trigger.dc_offset_percent)))
+					rfile.write('\nTRIGGER_THRESHOLD\t{th}'.format(th=self.GetTriggerValueADCs(trigger)))
 			if not not ac:
 				if ch == ac.ch:
 					rfile.write('\nPULSE_POLARITY\tNEGATIVE')
@@ -240,15 +240,15 @@ class Settings_Caen:
 	def ADC_to_Volts(self, adcs, channel):
 		return channel.ADC_to_Volts(adcs, self.sigRes)
 
-	def GetTriggerValueADCs(self, offset):
-		return int(round(np.divide(self.trig_thr_counts + 1 - offset / 50.0, self.sigRes)))
+	def GetTriggerValueADCs(self, channel):
+		return int(round(channel.base_line_u_adcs - channel.thr_counts - (2.0**self.dig_bits - 1) * (channel.dc_offset_percent/100.0 - 0.5)))
 
 	def MoveBinaryFiles(self):
 		print 'Moving binary files... ', ; sys.stdout.flush()
 		shutil.move('raw_wave{chs}.dat'.format(chs=self.sigCh), '{d}/Runs/{f}_signal.dat'.format(d=self.outdir, f=self.filename))
 		shutil.move('raw_wave{cht}.dat'.format(cht=self.trigCh), '{d}/Runs/{f}_trigger.dat'.format(d=self.outdir, f=self.filename))
 		if self.ac_enable:
-			shutil.move('raw_wave{cha}.dat'.format(cht=self.acCh), '{d}/Runs/{f}_veto.dat'.format(d=self.outdir, f=self.filename))
+			shutil.move('raw_wave{cha}.dat'.format(cha=self.acCh), '{d}/Runs/{f}_veto.dat'.format(d=self.outdir, f=self.filename))
 		print 'Done'
 
 	def CreateProgressBar(self, maxVal=1):

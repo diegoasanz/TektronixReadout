@@ -47,7 +47,7 @@ class Channel_Caen:
 		if self.type == 'signal':
 			self.dc_offset_percent = 45 if settings.bias < 0 else -45
 		else:
-			self.dc_offset_percent = round(100 * np.divide(3 * self.thr_counts + self.base_line_u_adcs, 2.0**settings.dig_bits - 1.0, dtype='f8') - 50)
+			self.dc_offset_percent = int(round(100 * np.divide(max(3 * self.thr_counts + self.base_line_u_adcs, 0), 2.0**settings.dig_bits - 1.0, dtype='f8') - 50))
 
 	def Calculate_Universal_ADCs(self, value_volts, sig_res):
 		return np.divide(value_volts, sig_res, dtype='f8')
