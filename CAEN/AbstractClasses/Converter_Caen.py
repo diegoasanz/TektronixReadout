@@ -68,8 +68,9 @@ if __name__ == '__main__':
 	time_res = np.double(sys.argv[15])
 	post_trig_percent = float(sys.argv[16])
 	trig_value = np.double(sys.argv[17])
-	dig_bits = np.int(sys.argv[18])
-	simultaneous_conversion = bool(sys.argv[19] != '0')
+	dig_bits = int(sys.argv[18])
+	time_recalib = float(sys.argv[19])
+	simultaneous_conversion = bool(sys.argv[20] != '0')
 
 	if simultaneous_conversion:
 		print 'Start creating root file simultaneously with data taking'
@@ -96,42 +97,46 @@ if __name__ == '__main__':
 		bar = CreateProgressBar(num_events, bar)
 		bar.start()
 
+	signal_written_events = int(round(os.path.getsize('{d}/raw_wave{s}.dat'.format(d=working_dir_location, s=signal_ch)) / struct_len))
+	trigger_written_events = int(round(os.path.getsize('{d}/raw_wave{t}.dat'.format(d=working_dir_location, t=trigger_ch)) / struct_len))
 	fs = open('{wd}/raw_wave{s}.dat'.format(wd=working_dir_location, s=signal_ch), 'rb')
 	ft = open('{wd}/raw_wave{t}.dat'.format(wd=working_dir_location, t=trigger_ch), 'rb')
 	if anti_co_ch != -1:
+		anti_co_written_events = int(round(os.path.getsize('{d}/raw_wave{a}.dat'.format(d=working_dir_location, a=anti_co_ch)) / struct_len))
 		fa = open('{wd}/raw_wave{a}.dat'.format(wd=working_dir_location, a=anti_co_ch), 'rb')
 
 	for ev in xrange(num_events):
 		t1 = time.time()
-
-		wait_for_data = True
-
+		wait_for_data = True if (signal_written_events <= ev or trigger_written_events <= ev) else False
+		if anti_co_ch != -1:
+			wait_for_data = bool(wait_for_data or (anti_co_written_events <= ev))
 		while wait_for_data:
-			if time.time() - t1 > 10:
-				print 'No data has been saved in file for event {ev} in the past 10 seconds... exiting!'.format(ev=ev)
-				exit()
-			signal_written_events = int(round(os.path.getsize('{d}/raw_wave{s}.dat'.format(d=working_dir_location, s=signal_ch)) / struct_len))
-			trigger_written_events = int(round(os.path.getsize('{d}/raw_wave{t}.dat'.format(d=working_dir_location, t=trigger_ch)) / struct_len))
-			if anti_co_ch != -1:
-				anti_co_written_events = int(round(os.path.getsize('{d}/raw_wave{a}.dat'.format(d=working_dir_location, a=anti_co_ch)) / struct_len))
-			if signal_written_events + trigger_written_events <= 2 * ev:
-				if anti_co_ch != -1:
-					if anti_co_written_events <= ev:
-						fs.close()
-						ft.close()
-						fa.close()
-				else:
+			if simultaneous_conversion:
+				if time.time() - t1 - 10 > time_recalib:
+					print 'No data has been saved in file for event {ev} in the past {t} seconds... exiting!'.format(ev=ev, t=(time_recalib + 10))
+					exit()
+				if not fs.closed:
 					fs.close()
+				if not ft.closed:
 					ft.close()
-			else:
-				fs = open('{wd}/raw_wave{s}.dat'.format(wd=working_dir_location, s=signal_ch), 'rb')
-				ft = open('{wd}/raw_wave{t}.dat'.format(wd=working_dir_location, t=trigger_ch), 'rb')
 				if anti_co_ch != -1:
-					if anti_co_written_events > ev:
-						wait_for_data = False
+					if not fa.closed:
+						fa.close()
+				signal_written_events = int(round(os.path.getsize('{d}/raw_wave{s}.dat'.format(d=working_dir_location, s=signal_ch)) / struct_len))
+				trigger_written_events = int(round(os.path.getsize('{d}/raw_wave{t}.dat'.format(d=working_dir_location, t=trigger_ch)) / struct_len))
+				wait_for_data = True if (signal_written_events <= ev or trigger_written_events <= ev) else False
+				if anti_co_ch != -1:
+					anti_co_written_events = int(round(os.path.getsize('{d}/raw_wave{a}.dat'.format(d=working_dir_location, a=anti_co_ch)) / struct_len))
+					wait_for_data = bool(wait_for_data or (anti_co_written_events <= ev))
+				if not wait_for_data:
+					fs = open('{wd}/raw_wave{s}.dat'.format(wd=working_dir_location, s=signal_ch), 'rb')
+					ft = open('{wd}/raw_wave{t}.dat'.format(wd=working_dir_location, t=trigger_ch), 'rb')
+					if anti_co_ch != -1:
 						fa = open('{wd}/raw_wave{a}.dat'.format(wd=working_dir_location, a=anti_co_ch), 'rb')
-				else:
-					wait_for_data = False
+			else:
+				print 'The data is corrupted... exiting'
+				exit()
+
 		fs.seek(ev * struct_len, 0)
 		datas = fs.read(struct_len)
 		ft.seek(ev * struct_len, 0)

@@ -121,6 +121,8 @@ class Settings_Caen:
 						self.prefix = parser.get('OUTPUT', 'prefix')
 					if parser.has_option('OUTPUT', 'suffix'):
 						self.suffix = parser.get('OUTPUT', 'suffix')
+					else:
+						self.suffix = ''
 				self.UpdateSignalResolution()
 
 	def UpdateSignalResolution(self):
@@ -249,13 +251,14 @@ class Settings_Caen:
 		shutil.move('raw_wave{cht}.dat'.format(cht=self.trigCh), '{d}/Runs/{f}_trigger.dat'.format(d=self.outdir, f=self.filename))
 		if self.ac_enable:
 			shutil.move('raw_wave{cha}.dat'.format(cha=self.acCh), '{d}/Runs/{f}_veto.dat'.format(d=self.outdir, f=self.filename))
+		self.RemoveBinaries()
+		print 'Done'
 
+	def RemoveBinaries(self):
 		os.remove('wave{s}.dat'.format(s=self.sigCh))
 		os.remove('wave{t}.dat'.format(t=self.trigCh))
 		if self.ac_enable:
 			os.remove('wave{a}.dat'.format(a=self.acCh))
-
-		print 'Done'
 
 	def CreateProgressBar(self, maxVal=1):
 		widgets = [
