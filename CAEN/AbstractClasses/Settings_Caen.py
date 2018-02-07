@@ -77,7 +77,7 @@ class Settings_Caen:
 
 				if parser.has_section('RUN'):
 					if parser.has_option('RUN', 'time'):
-						self.points = int(np.ceil(parser.getfloat('RUN', 'time') * 1e-6 / self.time_res))
+						self.points = int(np.ceil(parser.getfloat('RUN', 'time') * 1.0e-6 / self.time_res))
 					if parser.has_option('RUN', 'post_trigger_percent'):
 						self.post_trig_percent = parser.getint('RUN', 'post_trigger_percent')
 					if parser.has_option('RUN', 'num_events'):
@@ -184,17 +184,18 @@ class Settings_Caen:
 		rfile.write('\nOUTPUT_FILE_HEADER NO')
 		rfile.write('\n\n# specify the amount of samples to save. This defines the event window')
 		rfile.write('\nRECORD_LENGTH\t{p}'.format(p=int(self.points)))
-		rfile.write('\n\n# number of events to save in the file')
-		if doBaseLines:
-			rfile.write('\nMAX_NUM_EVENTS\t{n}'.format(n=1))
-		else:
-			rfile.write('\nMAX_NUM_EVENTS\t{n}'.format(n=self.num_events - events_written))
+		# rfile.write('\n\n# number of events to save in the file')
+		# if doBaseLines:
+		# 	rfile.write('\nMAX_NUM_EVENTS\t{n}'.format(n=1))
+		# else:
+		# 	# rfile.write('\nMAX_NUM_EVENTS\t{n}'.format(n=self.num_events - events_written))
+		# 	rfile.write('\nMAX_NUM_EVENTS\t{n}'.format(n=100000))
 		rfile.write('\n\nTEST_PATTERN\tNO')
 		rfile.write('\n\nENABLE_DES_MODE\tNO')
 		rfile.write('\n\n# use external trigger. Options are: DISABLED, ACQUISITION_ONLY, ACQUISITION_AND_TRGOUT')
 		rfile.write('\nEXTERNAL_TRIGGER\tDISABLED')
 		rfile.write('\n\n# specify maximum number of events to read out in one Block Transfer. Must be between 1 and 1023')
-		rfile.write('\nMAX_NUM_EVENTS_BLT\t100')
+		rfile.write('\nMAX_NUM_EVENTS_BLT\t1')
 		rfile.write('\n\n# the percentage of the amount of data stored after the trigger in the event window. Has an offset of ~1.6... only accepts integers')
 		rfile.write('\nPOST_TRIGGER\t{pt}'.format(pt=int(round(self.post_trig_percent*0.9996 - 1.6384))))
 		rfile.write('\n\n# number of events that have to be ready before readout when the IRQ is asserted. 0 means run continuously. 1023 is the maximum')

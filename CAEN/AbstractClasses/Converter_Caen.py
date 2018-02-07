@@ -33,9 +33,10 @@ def CreateProgressBar(maxVal=1, bar=None):
 
 
 def LookForTime0(trigVolts, points, percent_post, time_res, trigVal):
+	# ipdb.set_trace(context=7)
 	guess_pos = int(round(points * (100.0 - percent_post)/100.0))
-	array_points = np.arange(points, dtype=np.dtype('uint32'))
-	condition_trigg = np.array(np.abs(array_points - guess_pos) <= int(round(0.5e-6/time_res)), dtype='?')
+	array_points = np.arange(points, dtype=np.dtype('int32'))
+	condition_trigg = np.array(np.abs(array_points - guess_pos) <= int(round(0.1e-6/time_res)), dtype='?')
 	condition_no_trigg = np.array(1 - condition_trigg, dtype='?')
 	mean = np.extract(condition_no_trigg, trigVolts).mean()
 	sigma = np.extract(condition_no_trigg, trigVolts).std()
@@ -46,6 +47,18 @@ def LookForTime0(trigVolts, points, percent_post, time_res, trigVal):
 	np.putmask(temp_trig_volts, np.bitwise_not(condition_trigg), 100)
 	position0 = np.abs(temp_trig_volts - trigVal).argmin()
 	return position0
+
+def IsEventVetoed(vetoADC, points, trigPos, time_res, vetoVal=47):
+	array_points = np.arange(points, dtype=np.dtype('int32'))
+	window_around_trigg = 5e-9
+	condition_base_line = np.array(np.abs(array_points - trigPos) > int(round(50e-9/time_res)), dtype='?')
+	condition_search = np.array(np.abs(array_points - trigPos) <= int(round(window_around_trigg/(time_res))), dtype='?')
+	# condition_no_search = np.array(1 - condition_search, dtype='?')
+	mean = np.extract(condition_base_line, vetoADC).mean()
+	sigma = np.extract(condition_base_line, vetoADC).std()
+	veto_event = bool((np.extract(condition_search, vetoADC) - mean + vetoVal).min() <= 0)
+
+	return veto_event
 
 def ADC_to_Volts(adcs, sigres, nbits, offset_p):
 	return np.multiply(sigres, np.add(adcs, np.multiply(2 ** nbits - 1, offset_p / 100.0 - 0.5, dtype='f8'), dtype='f8'), dtype='f8')
@@ -82,6 +95,7 @@ if __name__ == '__main__':
 	raw_tree = ro.TTree(filename, filename)
 	if anti_co_ch != -1:
 		vetoBra = np.zeros(points, 'f8')
+		vetoedBra = np.zeros(1, '?')
 	eventBra = np.zeros(1, 'I')
 	voltBra = np.zeros(points, 'f8')
 	trigBra = np.zeros(points, 'f8')
@@ -92,10 +106,10 @@ if __name__ == '__main__':
 	raw_tree.Branch('voltageTrigger', trigBra, 'voltageTrigger[{s}]/D'.format(s=points))
 	if anti_co_ch != -1:
 		raw_tree.Branch('voltageVeto', vetoBra, 'voltageVeto[{s}]/D'.format(s=points))
-	if not simultaneous_conversion:
-		bar = None
-		bar = CreateProgressBar(num_events, bar)
-		bar.start()
+		raw_tree.Branch('vetoedEvent', vetoedBra, 'vetoedEvent/O')
+	bar = None
+	bar = CreateProgressBar(num_events, bar)
+	bar.start()
 
 	signal_written_events = int(round(os.path.getsize('{d}/raw_wave{s}.dat'.format(d=working_dir_location, s=signal_ch)) / struct_len))
 	trigger_written_events = int(round(os.path.getsize('{d}/raw_wave{t}.dat'.format(d=working_dir_location, t=trigger_ch)) / struct_len))
@@ -112,8 +126,8 @@ if __name__ == '__main__':
 			wait_for_data = bool(wait_for_data or (anti_co_written_events <= ev))
 		while wait_for_data:
 			if simultaneous_conversion:
-				if time.time() - t1 - 10 > time_recalib:
-					print 'No data has been saved in file for event {ev} in the past {t} seconds... exiting!'.format(ev=ev, t=(time_recalib + 10))
+				if time.time() - t1 > 60:
+					print 'No data has been saved in file for event {ev} in the past {t} seconds... exiting!'.format(ev=ev, t=60)
 					exit()
 				if not fs.closed:
 					fs.close()
@@ -163,6 +177,7 @@ if __name__ == '__main__':
 			ac = struct.Struct(struct_fmt).unpack_from(dataa)
 			vetoADCs = np.array(ac, 'H')
 			vetoVolts = ADC_to_Volts(vetoADCs, adc_res, dig_bits, anti_co_offset)
+			vetoed_event = IsEventVetoed(vetoADCs, points, trigPos, time_res)
 
 		eventBra.fill(ev)
 		np.putmask(timeBra, np.bitwise_not(np.zeros(points, '?')), timeVect)
@@ -170,11 +185,10 @@ if __name__ == '__main__':
 		np.putmask(trigBra, np.bitwise_not(np.zeros(points, '?')), triggVolts)
 		if anti_co_ch != -1:
 			np.putmask(vetoBra, np.bitwise_not(np.zeros(points, '?')), vetoVolts)
+			vetoedBra.fill(vetoed_event)
 		numFil = raw_tree.Fill()
-		if not simultaneous_conversion:
-			bar.update(ev + 1)
-	if not simultaneous_conversion:
-		bar.finish()
+		bar.update(ev + 1)
+	bar.finish()
 	raw_file.Write()
 	raw_file.Close()
 	fs.close()
