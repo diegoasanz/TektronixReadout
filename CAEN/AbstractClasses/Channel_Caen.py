@@ -71,6 +71,12 @@ class Channel_Caen:
 			self.dc_offset_percent = -50
 		self.base_line_u_adcs = self.Calculate_Universal_ADCs(self.ADC_to_Volts(mean_adc, settings.sigRes, settings.dig_bits), settings.sigRes)
 
+	def Correct_Threshold(self, sigma):
+		if self.type == 'trigger':
+			self.thr_counts = int(round(max(10*self.sigma_adcs, self.thr_counts)))
+		elif self.type == 'veto':
+			self.thr_counts = int(round(max(4*self.sigma_adcs, self.thr_counts)))
+
 	def ADC_to_Volts(self, adcs, sigres, nbits=14):
 		return np.multiply(sigres, np.add(adcs, np.multiply(2**nbits - 1, self.dc_offset_percent/100.0 - 0.5, dtype='f8'), dtype='f8'), dtype='f8')
 

@@ -56,7 +56,8 @@ def IsEventVetoed(vetoADC, points, trigPos, time_res, vetoVal=47):
 	# condition_no_search = np.array(1 - condition_search, dtype='?')
 	mean = np.extract(condition_base_line, vetoADC).mean()
 	sigma = np.extract(condition_base_line, vetoADC).std()
-	veto_event = bool((np.extract(condition_search, vetoADC) - mean + vetoVal).min() <= 0)
+	vetoValNew = 4 * sigma if vetoVal < 0.9 * 4 * vetoVal else vetoVal
+	veto_event = bool((np.extract(condition_search, vetoADC) - mean + vetoValNew).min() <= 0)
 
 	return veto_event
 
@@ -64,26 +65,26 @@ def ADC_to_Volts(adcs, sigres, nbits, offset_p):
 	return np.multiply(sigres, np.add(adcs, np.multiply(2 ** nbits - 1, offset_p / 100.0 - 0.5, dtype='f8'), dtype='f8'), dtype='f8')
 
 if __name__ == '__main__':
-	run_dir_location = str(sys.argv[1])
-	working_dir_location = str(sys.argv[2])
-	filename = str(sys.argv[3])
-	signal_ch = int(sys.argv[4])
-	trigger_ch = int(sys.argv[5])
-	anti_co_ch = int(sys.argv[6])
-	points = int(sys.argv[7])
-	num_events = int(sys.argv[8])
-	struct_len = int(sys.argv[9])
-	struct_fmt = str(sys.argv[10])
-	adc_res = np.double(sys.argv[11])
-	sig_offset = float(sys.argv[12])
-	trig_offset = float(sys.argv[13])
-	anti_co_offset = float(sys.argv[14])
-	time_res = np.double(sys.argv[15])
-	post_trig_percent = float(sys.argv[16])
-	trig_value = np.double(sys.argv[17])
-	dig_bits = int(sys.argv[18])
-	time_recalib = float(sys.argv[19])
-	simultaneous_conversion = bool(sys.argv[20] != '0')
+	run_dir_location = str(sys.argv[1])  # output directory location
+	working_dir_location = str(sys.argv[2])  # current directory location, where the raw_wave files are
+	filename = str(sys.argv[3])  # file name for the files
+	signal_ch = int(sys.argv[4])  # caen channel for the ccd signal
+	trigger_ch = int(sys.argv[5])  # caen channel for the trigger signal
+	anti_co_ch = int(sys.argv[6])  # caen channel for the veto scintillator signal
+	points = int(sys.argv[7])  # caen number of points in each event
+	num_events = int(sys.argv[8])  # number of events to convert
+	struct_len = int(sys.argv[9])  # structure length (obtained from struct_fmt and struct.calcsize(self.struct_fmt)
+	struct_fmt = str(sys.argv[10])  # structure format of the data per event i.e. '@{p}H'.format(p=self.points)
+	adc_res = np.double(sys.argv[11])  # adc resolution of the digitizer
+	sig_offset = float(sys.argv[12])  # percentage offset for ccd signal (value within [-50, 50]) look at wavedump config file
+	trig_offset = float(sys.argv[13])  # percentage offset for trigger signal (value within [-50, 50]) look at wavedump config file
+	anti_co_offset = float(sys.argv[14])  # percentage offset for veto signal (value within [-50, 50]) look at wavedump config file
+	time_res = np.double(sys.argv[15])  # time resolution of digitizer. i.e. 2e-9
+	post_trig_percent = float(sys.argv[16])  # percentage of the acquired data after trigger (look at wave dump config file)
+	trig_value = np.double(sys.argv[17])  # counts below base line for trigger
+	veto_value = int(sys.argv[18])  # counts below base line on the veto signal for vetoing
+	dig_bits = int(sys.argv[19])  # number of bits of the ADC i.e. 14
+	simultaneous_conversion = bool(sys.argv[20] != '0')  # whether or not to do the simultaneous conversion while taking data
 
 	if simultaneous_conversion:
 		print 'Start creating root file simultaneously with data taking'
