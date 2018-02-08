@@ -50,9 +50,9 @@ def LookForTime0(trigVolts, points, percent_post, time_res, trigVal):
 
 def IsEventVetoed(vetoADC, points, trigPos, time_res, vetoVal=47):
 	array_points = np.arange(points, dtype=np.dtype('int32'))
-	window_around_trigg = 5e-9
-	condition_base_line = np.array(np.abs(array_points - trigPos) > int(round(50e-9/time_res)), dtype='?')
-	condition_search = np.array(np.abs(array_points - trigPos) <= int(round(window_around_trigg/(time_res))), dtype='?')
+	window_around_trigg = 50e-9
+	condition_base_line = np.array(np.abs(array_points - trigPos) > int(round(window_around_trigg/float(time_res))), dtype='?')
+	condition_search = np.array(1 - condition_base_line, dtype='?')
 	# condition_no_search = np.array(1 - condition_search, dtype='?')
 	mean = np.extract(condition_base_line, vetoADC).mean()
 	sigma = np.extract(condition_base_line, vetoADC).std()
