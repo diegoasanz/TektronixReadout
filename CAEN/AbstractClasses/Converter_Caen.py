@@ -61,6 +61,28 @@ def IsEventVetoed(vetoADC, points, trigPos, time_res, vetoVal=47):
 
 	return veto_event
 
+def IsEventBadShape(signalADC, points, trigPos, time_res):
+	array_points = np.arange(points, dtype=np.dtype('int32'))
+	condition_base_line = np.array(array_points - trigPos <= 0, dtype='?')
+	condition_peak_pos = np.array(np.abs(array_points - (2.2e-6/float(time_res) + trigPos)) <= 0.6e-6/float(time_res), dtype='?')  # values 2.2 and 0.5 us come from shape of signal
+	mean = np.extract(condition_base_line, signalADC).mean()
+	sigma = np.extract(condition_base_line, signalADC).std()
+	lim_inf = condition_peak_pos.argmax()
+	lim_sup = -condition_peak_pos[::-1].argmax() - 1
+	lim_sup += points
+	peak_pos = signalADC.argmin()
+	if peak_pos > lim_inf and lim_sup > peak_pos:
+		return 0
+	else:
+		modified_adc = signalADC - sigma
+		modified_adc[lim_inf] += 2*sigma
+		modified_adc[lim_sup] += 2*sigma
+		peak_pos = modified_adc.argmin()
+		if peak_pos > lim_inf and lim_sup > peak_pos:
+			return -1
+		else:
+			return 1
+
 def ADC_to_Volts(adcs, sigres, nbits, offset_p):
 	return np.multiply(sigres, np.add(adcs, np.multiply(2 ** nbits - 1, offset_p / 100.0 - 0.5, dtype='f8'), dtype='f8'), dtype='f8')
 
@@ -85,6 +107,7 @@ if __name__ == '__main__':
 	veto_value = int(sys.argv[18])  # counts below base line on the veto signal for vetoing
 	dig_bits = int(sys.argv[19])  # number of bits of the ADC i.e. 14
 	simultaneous_conversion = bool(sys.argv[20] != '0')  # whether or not to do the simultaneous conversion while taking data
+	time_recal = float(sys.argv[21])  # time between digitiser recalibrations
 
 	if simultaneous_conversion:
 		print 'Start creating root file simultaneously with data taking'
@@ -101,6 +124,7 @@ if __name__ == '__main__':
 	voltBra = np.zeros(points, 'f8')
 	trigBra = np.zeros(points, 'f8')
 	timeBra = np.zeros(points, 'f8')
+	badShapeBra = np.zeros(1, dtype=np.dtype('int8'))  # signed char
 	raw_tree.Branch('event', eventBra, 'event/i')
 	raw_tree.Branch('time', timeBra, 'time[{s}]/D'.format(s=points))
 	raw_tree.Branch('voltageSignal', voltBra, 'voltageSignal[{s}]/D'.format(s=points))
@@ -108,6 +132,7 @@ if __name__ == '__main__':
 	if anti_co_ch != -1:
 		raw_tree.Branch('voltageVeto', vetoBra, 'voltageVeto[{s}]/D'.format(s=points))
 		raw_tree.Branch('vetoedEvent', vetoedBra, 'vetoedEvent/O')
+	raw_tree.Branch('badShape', badShapeBra, 'badShape/B')  # signed char
 	bar = None
 	bar = CreateProgressBar(num_events, bar)
 	bar.start()
@@ -127,8 +152,9 @@ if __name__ == '__main__':
 			wait_for_data = bool(wait_for_data or (anti_co_written_events <= ev))
 		while wait_for_data:
 			if simultaneous_conversion:
-				if time.time() - t1 > 60:
-					print 'No data has been saved in file for event {ev} in the past {t} seconds... exiting!'.format(ev=ev, t=60)
+				time_break = int(np.ceil(time_recal + 20))
+				if time.time() - t1 > time_break:
+					print 'No data has been saved in file for event {ev} in the past {t} seconds... exiting!'.format(ev=ev, t=time_break)
 					exit()
 				if not fs.closed:
 					fs.close()
@@ -179,7 +205,7 @@ if __name__ == '__main__':
 			vetoADCs = np.array(ac, 'H')
 			vetoVolts = ADC_to_Volts(vetoADCs, adc_res, dig_bits, anti_co_offset)
 			vetoed_event = IsEventVetoed(vetoADCs, points, trigPos, time_res)
-
+		bad_shape_event = IsEventBadShape(signalADCs, points, trigPos, time_res)
 		eventBra.fill(ev)
 		np.putmask(timeBra, np.bitwise_not(np.zeros(points, '?')), timeVect)
 		np.putmask(voltBra, np.bitwise_not(np.zeros(points, '?')), signalVolts)
@@ -187,6 +213,7 @@ if __name__ == '__main__':
 		if anti_co_ch != -1:
 			np.putmask(vetoBra, np.bitwise_not(np.zeros(points, '?')), vetoVolts)
 			vetoedBra.fill(vetoed_event)
+		badShapeBra.fill(bad_shape_event)
 		numFil = raw_tree.Fill()
 		bar.update(ev + 1)
 	bar.finish()

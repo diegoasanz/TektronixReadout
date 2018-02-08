@@ -301,7 +301,8 @@ class CCD_Caen:
 		                str(self.settings.num_events),str(self.settings.struct_len), self.settings.struct_fmt,
 		                str(self.settings.sigRes), str(self.signal.dc_offset_percent), str(self.trigger.dc_offset_percent),
 		                str(ac_offset), str(self.settings.time_res), str(self.settings.post_trig_percent), str(trig_th_in_volts),
-		                str(veto_value), str(self.settings.dig_bits), str(int(self.settings.simultaneous_conversion))])
+		                str(veto_value), str(self.settings.dig_bits), str(int(self.settings.simultaneous_conversion)),
+		                str(self.settings.time_calib)])
 		return p
 
 	def CreateProgressBar(self, maxVal=1):
