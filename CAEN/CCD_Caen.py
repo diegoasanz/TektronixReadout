@@ -251,9 +251,11 @@ class CCD_Caen:
 				# ipdb.set_trace(context=5)
 		# self.trigger.Correct_Base_Line(mean_volts=self.settings.ADC_to_Volts(mean_t, self.trigger), sigma_counts=std_t, settings=self.settings)
 		self.trigger.Correct_Base_Line2(mean_adc=mean_t, sigma_adc=std_t, settings=self.settings)
+		self.trigger.Correct_Threshold(sigma=std_t)
 		if self.settings.ac_enable:
 			# self.anti_co.Correct_Base_Line(mean_volts=self.settings.ADC_to_Volts(mean_ac, self.anti_co), sigma_counts=std_ac, settings=self.settings)
 			self.anti_co.Correct_Base_Line2(mean_adc=mean_ac, sigma_adc=std_ac, settings=self.settings)
+			self.anti_co.Correct_Threshold(sigma=std_ac)
 
 	def GetData(self):
 		t0 = time.time()

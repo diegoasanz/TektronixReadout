@@ -48,28 +48,28 @@ class Channel_Caen:
 		if self.type == 'signal':
 			self.dc_offset_percent = 45 if settings.bias < 0 else -45
 		else:
-			limit = max(self.base_line_u_adcs + self.sigma_adcs * 10, 0)
-			self.dc_offset_percent = int(round(100.0*(limit-2**settings.dig_bits+1.0)/float(2**settings.dig_bits-1)+50))
-			print self.type, self.base_line_u_adcs, self.sigma_adcs, limit, self.dc_offset_percent
+			limit = self.base_line_u_adcs + 10 * self.sigma_adcs
+			if limit < 0:
+				self.dc_offset_percent = -50
+			else:
+				self.dc_offset_percent = int(round(100 * (limit/float(2**settings.dig_bits - 1) - 0.5)))
 
 	def Calculate_Universal_ADCs(self, value_volts, sig_res):
 		return np.divide(value_volts, sig_res, dtype='f8')
 
-	def Correct_Base_Line(self, mean_volts, sigma_counts, settings):
-		# print self.type, sigma_counts
-		# ipdb.set_trace(context=7)
-		self.base_line_u_adcs = self.Calculate_Universal_ADCs(mean_volts, settings.sigRes)
-		self.sigma_adcs = sigma_counts
-		self.Calculate_DC_Offset_Percentage(settings)
+	# def Correct_Base_Line(self, mean_volts, sigma_counts, settings):
+	# 	self.base_line_u_adcs = self.Calculate_Universal_ADCs(mean_volts, settings.sigRes)
+	# 	self.sigma_adcs = sigma_counts
+	# 	self.Calculate_DC_Offset_Percentage(settings)
 
 	def Correct_Base_Line2(self, mean_adc, sigma_adc, settings):
 		self.sigma_adcs = sigma_adc
 		variable = mean_adc + 50 * sigma_adc
+		self.base_line_u_adcs = self.Calculate_Universal_ADCs(self.ADC_to_Volts(mean_adc, settings.sigRes, settings.dig_bits), settings.sigRes)
 		if variable > (2**settings.dig_bits - 1) * (0.5 + self.dc_offset_percent / 100.0):
 			self.dc_offset_percent += int(round(100.0 * (variable + 1 - 2.0**settings.dig_bits) / (2.0**settings.dig_bits - 1.0)))
 		else:
 			self.dc_offset_percent = -50
-		self.base_line_u_adcs = self.Calculate_Universal_ADCs(self.ADC_to_Volts(mean_adc, settings.sigRes, settings.dig_bits), settings.sigRes)
 
 	def Correct_Threshold(self, sigma):
 		if self.type == 'trigger':
