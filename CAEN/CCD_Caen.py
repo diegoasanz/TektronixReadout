@@ -43,7 +43,7 @@ class CCD_Caen:
 
 	def GetBaseLines(self):
 		self.settings.SetupDigitiser(doBaseLines=True, signal=self.signal, trigger=self.trigger, ac=self.anti_co)
-		p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD_BL.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE)
+		p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD_BL.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE, close_fds=True)
 		t0 = time.time()
 		self.CreateEmptyFiles()
 		events_written = self.GetWaveforms(p, events=1)
@@ -79,9 +79,10 @@ class CCD_Caen:
 			self.settings.Delay(1)
 			p.stdin.write('s')
 			p.stdin.flush()
-			# self.settings.Delay(1)
-			p.stdin.write('P')
-			p.stdin.flush()
+			if self.settings.plot_waveforms:
+				# self.settings.Delay(1)
+				p.stdin.write('P')
+				p.stdin.flush()
 			# self.settings.Delay(1)
 			p.stdin.write('w')
 			p.stdin.flush()
@@ -104,9 +105,10 @@ class CCD_Caen:
 			self.settings.Delay(1)
 			p.stdin.write('W')
 			p.stdin.flush()
-			# self.settings.Delay(1)
-			p.stdin.write('P')
-			p.stdin.flush()
+			if self.settings.plot_waveforms:
+				# self.settings.Delay(1)
+				p.stdin.write('P')
+				p.stdin.flush()
 			# self.settings.Delay(1)
 			p.stdin.write('s')
 			p.stdin.flush()
@@ -278,8 +280,8 @@ class CCD_Caen:
 			aco_written = 0
 			if self.settings.ac_enable:
 				aco_written = self.CalculateEventsWritten(self.anti_co.ch)
-			# p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE)
-			p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE, stdout=subp.PIPE)
+			# p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE, close_fds=True)
+			p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE, stdout=subp.PIPE, close_fds=True)
 			total_events = self.GetWaveforms(p, self.settings.num_events, sig_written, trg_written, aco_written)
 		self.CloseFiles()
 		t0 = time.time() - t0
@@ -302,7 +304,7 @@ class CCD_Caen:
 		                str(self.settings.sigRes), str(self.signal.dc_offset_percent), str(self.trigger.dc_offset_percent),
 		                str(ac_offset), str(self.settings.time_res), str(self.settings.post_trig_percent), str(trig_th_in_volts),
 		                str(veto_value), str(self.settings.dig_bits), str(int(self.settings.simultaneous_conversion)),
-		                str(self.settings.time_calib)])
+		                str(self.settings.time_calib)], close_fds=True)
 		return p
 
 	def CreateProgressBar(self, maxVal=1):
@@ -317,6 +319,9 @@ class CCD_Caen:
 		]
 		self.bar = progressbar.ProgressBar(widgets=widgets, maxval=maxVal)
 
+	def PrintPlotLimits(self, ti=-5.12e-7, tf=4.606e-6, vmin=-0.7, vmax=0.05):
+		print np.double([(tf-ti)/float(self.settings.time_res) +1, ti-self.settings.time_res/2.0,
+		                      tf+self.settings.time_res/2.0, (vmax-vmin)/self.settings.sigRes, vmin, vmax])
 
 if __name__ == '__main__':
 	parser = OptionParser()

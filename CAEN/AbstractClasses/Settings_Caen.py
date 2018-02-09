@@ -32,6 +32,7 @@ class Settings_Caen:
 		self.input_range = 2.15
 		self.calib_path = ''
 		self.simultaneous_conversion = False
+		self.plot_waveforms = False
 		self.time_res = 2e-9
 		self.sigCh = 0
 		self.trigCh = 1
@@ -91,7 +92,9 @@ class Settings_Caen:
 					if parser.has_option('RUN', 'calib_path'):
 						self.calib_path = parser.get('RUN', 'calib_path')
 					if parser.has_option('RUN', 'simultaneous_conversion'):
-						self.simultaneous_conversion = bool(parser.getint('RUN', 'simultaneous_conversion'))
+						self.simultaneous_conversion = bool(parser.getboolean('RUN', 'simultaneous_conversion'))
+					if parser.has_option('RUN', 'plot_waveforms'):
+						self.plot_waveforms = bool(parser.getboolean('RUN', 'plot_waveforms'))
 
 				if parser.has_section('SIGNAL'):
 					if parser.has_option('SIGNAL', 'channel'):
