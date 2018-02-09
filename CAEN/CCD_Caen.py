@@ -38,8 +38,9 @@ class CCD_Caen:
 		if self.settings.ac_enable:
 			self.anti_co = Channel_Caen(self.settings.acCh, 'veto', self.verb)
 			self.anti_co.Set_Channel(self.settings)
-
 		self.fs0, self.ft0, self.fa0 = None, None, None
+		self.RemoveFiles()
+
 
 	def GetBaseLines(self):
 		self.settings.SetupDigitiser(doBaseLines=True, signal=self.signal, trigger=self.trigger, ac=self.anti_co)
@@ -62,6 +63,25 @@ class CCD_Caen:
 		if self.settings.ac_enable:
 			self.fa0 = file('raw_wave{a}.dat'.format(a=self.anti_co.ch), 'wb')
 			# self.fa0.close()
+
+	def RemoveFiles(self):
+		# used, for example, to remove old files that may have stayed due to crashes
+		if self.fs0:
+			if not self.fs0.closed:
+				self.fs0.close()
+		if self.ft0:
+			if not self.ft0.closed:
+				self.ft0.close()
+		if self.settings.ac_enable:
+			if self.fa0:
+				if not self.fa0.closed:
+					self.fa0.close()
+		channels = [self.signal.ch, self.trigger.ch, self.anti_co.ch] if self.settings.ac_enable else [self.signal.ch, self.trigger.ch]
+		for ch in channels:
+			if os.path.isfile('raw_waves{c}.dat'.format(c=ch)):
+				os.remove('raw_waves{c}.dat'.format(c=ch))
+			if os.path.isfile('waves{c}.dat'.format(c=ch)):
+				os.remove('waves{c}.dat'.format(c=ch))
 
 	def CloseFiles(self):
 		self.ft0.close()

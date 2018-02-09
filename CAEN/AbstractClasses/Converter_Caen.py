@@ -37,7 +37,7 @@ class Converter_Caen:
 		self.anti_co_offset = veto_dcop  # percentage offset for veto signal (value within [-50, 50]) look at wavedump config file
 		self.time_res = time_res  # time resolution of digitizer. i.e. 2e-9
 		self.post_trig_percent = post_trig  # percentage of the acquired data after trigger (look at wave dump config file)
-		self.trig_value = trig_val  # counts below base line for trigger
+		self.trig_value = trig_val  # volts below base line for trigger
 		self.veto_value = veto_val  # counts below base line on the veto signal for vetoing
 		self.dig_bits = dig_bits  # number of bits of the ADC i.e. 14
 		self.simultaneous_conversion = sim_conv  # whether or not to do the simultaneous conversion while taking data
@@ -70,6 +70,7 @@ class Converter_Caen:
 
 	def SetupRootFile(self, arguments):
 		if self.simultaneous_conversion:
+			print '\n', str(arguments)
 			print 'Start creating root file simultaneously with data taking'
 		else:
 			print str(arguments)
@@ -139,7 +140,7 @@ class Converter_Caen:
 					if not self.fa.closed:
 						self.fa.close()
 				self.GetBinariesWrittenEvents()
-				self.CheckFilesSizes()
+				self.CheckFilesSizes(ev)
 				if not self.wait_for_data:
 					self.OpenRawBinaries()
 			else:
@@ -243,7 +244,8 @@ class Converter_Caen:
 	def IsPedestalBad(self):
 		sigma = np.extract(self.condition_base_line, self.sigADC).std()
 		sigma_volts = sigma * self.adc_res
-		if sigma_volts >= 2e-3 or abs(self.sigADC[0] - self.sigADC[self.trigPos]) >= 15e-3:
+		diff_volts = abs(int(self.sigADC[0]) - int(self.sigADC[self.trigPos])) * self.adc_res
+		if sigma_volts >= 2e-3 or diff_volts >= 15e-3:
 			return True
 		else:
 			return False
@@ -311,7 +313,7 @@ if __name__ == '__main__':
 	anti_co_offset = float(sys.argv[14])  # percentage offset for veto signal (value within [-50, 50]) look at wavedump config file
 	time_res = np.double(sys.argv[15])  # time resolution of digitizer. i.e. 2e-9
 	post_trig_percent = float(sys.argv[16])  # percentage of the acquired data after trigger (look at wave dump config file)
-	trig_value = np.double(sys.argv[17])  # counts below base line for trigger
+	trig_value = np.double(sys.argv[17])  # volts below base line for trigger
 	veto_value = int(sys.argv[18])  # counts below base line on the veto signal for vetoing
 	dig_bits = int(sys.argv[19])  # number of bits of the ADC i.e. 14
 	simultaneous_conversion = bool(sys.argv[20] != '0')  # whether or not to do the simultaneous conversion while taking data
@@ -324,7 +326,7 @@ if __name__ == '__main__':
 	converter.SetupRootFile(sys.argv)
 	converter.GetBinariesWrittenEvents()
 	converter.OpenRawBinaries()
-	converter.CreateProgressBar()
+	converter.CreateProgressBar(converter.num_events)
 	converter.ConvertEvents()
 	converter.CloseAll()
 
