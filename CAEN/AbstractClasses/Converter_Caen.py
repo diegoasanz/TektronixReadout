@@ -48,7 +48,8 @@ class Converter_Caen:
 
 		self.raw_file = None
 		self.raw_tree = None
-		self.eventBra = self.voltBra = self.trigBra = self.vetoBra = self.timeBra = self.vetoedBra = self.badShapeBra = None
+		self.eventBra = self.voltBra = self.trigBra = self.vetoBra = self.timeBra = self.vetoedBra = self.badShapeBra = self.badPedBra = None
+		self.t0 = time.time()
 
 		self.signal_written_events = self.trigger_written_events = self.anti_co_written_events = None
 		self.fs = self.ft = self.fa = None
@@ -58,6 +59,12 @@ class Converter_Caen:
 		self.sigADC = self.trigADC = self.vetoADC = None
 		self.sigVolts = self.trigVolts = self.vetoVolts = None
 		self.trigPos = None
+		self.timeVect = None
+		self.vetoed_event = None
+		self.bad_shape_event = None
+		self.bad_pedstal_event = None
+		self.condition_base_line = None
+		self.condition_peak_pos = None
 
 		self.bar = None
 
@@ -67,7 +74,6 @@ class Converter_Caen:
 		else:
 			print str(arguments)
 			print 'Start creating root file'
-		t0 = time.time()
 		self.raw_file = ro.TFile('{wd}/{d}/Runs/{r}.root'.format(wd=self.working_dir_location, d=self.run_dir_location, r=self.filename), 'RECREATE')
 		self.raw_tree = ro.TTree(self.filename, self.filename)
 		if self.doVeto:
@@ -78,6 +84,7 @@ class Converter_Caen:
 		self.trigBra = np.zeros(self.points, 'f8')
 		self.timeBra = np.zeros(self.points, 'f8')
 		self.badShapeBra = np.zeros(1, dtype=np.dtype('int8'))  # signed char
+		self.badPedBra = np.zeros(1, '?')
 		self.raw_tree.Branch('event', self.eventBra, 'event/i')
 		self.raw_tree.Branch('time', self.timeBra, 'time[{s}]/D'.format(s=self.points))
 		self.raw_tree.Branch('voltageSignal', self.voltBra, 'voltageSignal[{s}]/D'.format(s=self.points))
@@ -86,6 +93,7 @@ class Converter_Caen:
 			self.raw_tree.Branch('voltageVeto', self.vetoBra, 'voltageVeto[{s}]/D'.format(s=self.points))
 			self.raw_tree.Branch('vetoedEvent', self.vetoedBra, 'vetoedEvent/O')
 		self.raw_tree.Branch('badShape', self.badShapeBra, 'badShape/B')  # signed char
+		self.raw_tree.Branch('badPedestal', self.badPedBra, 'badPedestal/O')
 
 	def OpenRawBinaries(self):
 		self.fs = open('{wd}/raw_wave{s}.dat'.format(wd=self.working_dir_location, s=self.signal_ch), 'rb')
@@ -156,6 +164,17 @@ class Converter_Caen:
 				print 'No event in veto trigger file... exiting'
 				exit()
 
+	def FillBranches(self, ev):
+		self.eventBra.fill(ev)
+		np.putmask(self.timeBra, np.bitwise_not(np.zeros(self.points, '?')), self.timeVect)
+		np.putmask(self.voltBra, np.bitwise_not(np.zeros(self.points, '?')), self.sigVolts)
+		np.putmask(self.trigBra, np.bitwise_not(np.zeros(self.points, '?')), self.trigVolts)
+		if self.doVeto:
+			np.putmask(self.vetoBra, np.bitwise_not(np.zeros(self.points, '?')), self.vetoVolts)
+			self.vetoedBra.fill(self.vetoed_event)
+		self.badShapeBra.fill(self.bad_shape_event)
+		self.badPedBra.fill(self.bad_pedstal_event)
+
 	def ConvertEvents(self):
 		self.bar.start()
 
@@ -171,83 +190,88 @@ class Converter_Caen:
 			t = struct.Struct(struct_fmt).unpack_from(self.datat)
 			self.trigADC = np.array(t, 'H')
 			self.trigVolts = self.ADC_to_Volts('trigger')
-			trigPos = self.LookForTime0(trigVolts=triggVolts, points=points, percent_post=post_trig_percent, time_res=time_res, trigVal=trig_value)
-			timeVect = np.linspace(-trigPos * time_res, time_res * (points - 1 - trigPos), points, dtype='f8')
+			self.LookForTime0()
+			self.timeVect = np.linspace(-self.trigPos * self.time_res, self.time_res * (self.points - 1 - self.trigPos), self.points, dtype='f8')
 			if self.doVeto:
-				ac = struct.Struct(struct_fmt).unpack_from(dataa)
-				vetoADCs = np.array(ac, 'H')
-				vetoVolts = ADC_to_Volts(vetoADCs, adc_res, dig_bits, anti_co_offset)
-				vetoed_event = IsEventVetoed(vetoADCs, points, trigPos, time_res)
-			bad_shape_event = IsEventBadShape(signalADCs, points, trigPos, time_res)
-			eventBra.fill(ev)
-			np.putmask(timeBra, np.bitwise_not(np.zeros(points, '?')), timeVect)
-			np.putmask(voltBra, np.bitwise_not(np.zeros(points, '?')), signalVolts)
-			np.putmask(trigBra, np.bitwise_not(np.zeros(points, '?')), triggVolts)
-			if self.doVeto:
-				np.putmask(vetoBra, np.bitwise_not(np.zeros(points, '?')), vetoVolts)
-				vetoedBra.fill(vetoed_event)
-			badShapeBra.fill(bad_shape_event)
-			numFil = raw_tree.Fill()
-			bar.update(ev + 1)
-		bar.finish()
-		raw_file.Write()
-		raw_file.Close()
-		fs.close()
-		ft.close()
+				ac = struct.Struct(struct_fmt).unpack_from(self.dataa)
+				self.vetoADC = np.array(ac, 'H')
+				self.vetoVolts = self.ADC_to_Volts('veto')
+				self.vetoed_event = self.IsEventVetoed()
+			self.DefineSignalBaseLineAndPeakPosition()
+			self.bad_shape_event = self.IsEventBadShape()
+			self.bad_pedstal_event = self.IsPedestalBad()
+			self.FillBranches(ev)
+			numFil = self.raw_tree.Fill()
+			self.bar.update(ev + 1)
+
+	def CloseAll(self):
+		self.bar.finish()
+		self.raw_file.Write()
+		self.raw_file.Close()
+		self.fs.close()
+		self.ft.close()
 		if self.doVeto:
-			fa.close()
-		t0 = time.time() - t0
-		print 'Time creating root tree:', t0, 'seconds'
+			self.fa.close()
+		self.t0 = time.time() - self.t0
+		print 'Time creating root tree:', self.t0, 'seconds'
 		exit()
 
-	def LookForTime0(self, trigVolts, points, percent_post, time_res, trigVal):
+	def LookForTime0(self):
 		# ipdb.set_trace(context=7)
 		guess_pos = int(round(self.points * (100.0 - self.post_trig_percent)/100.0))
 		condition_trigg = np.array(np.abs(self.array_points - guess_pos) <= int(round(0.1e-6/self.time_res)), dtype='?')
 		condition_no_trigg = np.array(1 - condition_trigg, dtype='?')
-		mean = np.extract(condition_no_trigg, trigVolts).mean()
-		sigma = np.extract(condition_no_trigg, trigVolts).std()
-		temp_trig_volts = np.copy(trigVolts)
+		mean = np.extract(condition_no_trigg, self.trigVolts).mean()
+		sigma = np.extract(condition_no_trigg, self.trigVolts).std()
+		temp_trig_volts = np.copy(self.trigVolts)
 		np.putmask(temp_trig_volts, condition_no_trigg, 100)
 		volt_min_pos = temp_trig_volts.argmin()
 		condition_trigg = np.bitwise_and(condition_trigg, np.array(self.array_points <= volt_min_pos))
 		np.putmask(temp_trig_volts, np.bitwise_not(condition_trigg), 100)
-		position0 = np.abs(temp_trig_volts - self.trig_value).argmin()
-		return position0
+		self.trigPos = np.abs(temp_trig_volts - self.trig_value).argmin()
 
-	def IsEventVetoed(self, vetoADC, points, trigPos, time_res, vetoVal=47):
-		array_points = np.arange(points, dtype=np.dtype('int32'))
+	def IsEventVetoed(self):
 		window_around_trigg = 50e-9
-		condition_base_line = np.array(np.abs(array_points - trigPos) > int(round(window_around_trigg/float(time_res))), dtype='?')
-		condition_search = np.array(1 - condition_base_line, dtype='?')
-		# condition_no_search = np.array(1 - condition_search, dtype='?')
-		mean = np.extract(condition_base_line, vetoADC).mean()
-		sigma = np.extract(condition_base_line, vetoADC).std()
-		vetoValNew = 4 * sigma if vetoVal < 0.9 * 4 * vetoVal else vetoVal
-		veto_event = bool((np.extract(condition_search, vetoADC) - mean + vetoValNew).min() <= 0)
-
+		condition_veto_base_line = np.array(np.abs(self.array_points - self.trigPos) > int(round(window_around_trigg/float(self.time_res))), dtype='?')
+		condition_search = np.array(1 - condition_veto_base_line, dtype='?')
+		mean = np.extract(condition_veto_base_line, self.vetoADC).mean()
+		sigma = np.extract(condition_veto_base_line, self.vetoADC).std()
+		vetoValNew = 4 * sigma if self.veto_value < 0.9 * 4 * self.veto_value else self.veto_value
+		veto_event = bool((np.extract(condition_search, self.vetoADC) - mean + vetoValNew).min() <= 0)
 		return veto_event
 
-	def IsEventBadShape(self, signalADC, points, trigPos, time_res):
-		array_points = np.arange(points, dtype=np.dtype('int32'))
-		condition_base_line = np.array(array_points - trigPos <= 0, dtype='?')
-		condition_peak_pos = np.array(np.abs(array_points - (2.2e-6/float(time_res) + trigPos)) <= 0.6e-6/float(time_res), dtype='?')  # values 2.2 and 0.5 us come from shape of signal
-		mean = np.extract(condition_base_line, signalADC).mean()
-		sigma = np.extract(condition_base_line, signalADC).std()
-		lim_inf = condition_peak_pos.argmax()
-		lim_sup = -condition_peak_pos[::-1].argmax() - 1
-		lim_sup += points
-		peak_pos = signalADC.argmin()
-		if peak_pos > lim_inf and lim_sup > peak_pos:
+	def IsPedestalBad(self):
+		sigma = np.extract(self.condition_base_line, self.sigADC).std()
+		sigma_volts = sigma * self.adc_res
+		if sigma_volts >= 2e-3 or abs(self.sigADC[0] - self.sigADC[self.trigPos]) >= 15e-3:
+			return True
+		else:
+			return False
+
+	def DefineSignalBaseLineAndPeakPosition(self):
+		self.condition_base_line = np.array(self.array_points <= self.trigPos, dtype='?')
+		# values 2.2 and 0.5 us come from shape of signal
+		self.condition_peak_pos = np.array(np.abs(self.array_points - (2.2e-6/float(self.time_res) + self.trigPos)) <= 0.6e-6/float(self.time_res), dtype='?')
+
+	def IsEventBadShape(self):
+		# mean = np.extract(self.condition_base_line, self.sigADC).mean()
+		sigma = np.extract(self.condition_base_line, self.sigADC).std()
+		lim_inf = self.condition_peak_pos.argmax()
+		lim_sup = self.points - self.condition_peak_pos[::-1].argmax() - 1
+		peak_pos = self.sigADC.argmin()
+		if lim_inf < peak_pos < lim_sup:
+			# The event has a good shape
 			return 0
 		else:
-			modified_adc = signalADC - sigma
+			modified_adc = self.sigADC - sigma
 			modified_adc[lim_inf] += 2*sigma
 			modified_adc[lim_sup] += 2*sigma
 			peak_pos = modified_adc.argmin()
-			if peak_pos > lim_inf and lim_sup > peak_pos:
+			if lim_inf < peak_pos < lim_sup:
+				# Can't tell if the event has a bad shape
 				return -1
 			else:
+				# Event has bad shape
 				return 1
 
 	def IsPedestalNotFlat(self, signalADC, points, trigPos, time_res):
@@ -267,7 +291,7 @@ class Converter_Caen:
 		else:
 			print 'Wrong type. Exiting'
 			exit()
-		result = np.multiply(self.adc_res, np.add(adcs, np.multiply(2 ** self.dig_bits - 1, offset / 100.0 - 0.5, dtype='f8'), dtype='f8'), dtype='f8')
+		result = np.multiply(self.adc_res, np.add(adcs, np.multiply(2 ** self.dig_bits - 1.0, offset / 100.0 - 0.5, dtype='f8'), dtype='f8'), dtype='f8')
 		return result
 
 if __name__ == '__main__':
@@ -301,6 +325,8 @@ if __name__ == '__main__':
 	converter.GetBinariesWrittenEvents()
 	converter.OpenRawBinaries()
 	converter.CreateProgressBar()
+	converter.ConvertEvents()
+	converter.CloseAll()
 
 
 
