@@ -232,7 +232,6 @@ class Converter_Caen:
 		self.trigPos = np.abs(temp_trig_volts - self.trig_value).argmin()
 
 	def IsEventVetoed(self):
-		ipdb.set_trace(context=7)
 		window_around_trigg = 50e-9
 		condition_veto_base_line = np.array(np.abs(self.array_points - self.trigPos) > int(round(window_around_trigg/float(self.time_res))), dtype='?')
 		condition_search = np.array(1 - condition_veto_base_line, dtype='?')

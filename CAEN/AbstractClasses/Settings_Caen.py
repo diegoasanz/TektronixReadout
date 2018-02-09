@@ -28,12 +28,18 @@ class Settings_Caen:
 		self.post_trig_percent = 90
 		self.num_events = 10
 		self.time_calib = 300
+		self.dut = 'diamond'
 		self.bias = 0
 		self.input_range = 2.15
 		self.calib_path = ''
 		self.simultaneous_conversion = False
 		self.plot_waveforms = False
 		self.time_res = 2e-9
+		self.pics_folder_path = ''
+		self.hv_supply = ''
+		self.hv_ch = 0
+		self.current_limit = 0
+		self.hot_start = True
 		self.sigCh = 0
 		self.trigCh = 1
 		self.trig_base_line = -0.08
@@ -85,6 +91,8 @@ class Settings_Caen:
 						self.num_events = parser.getint('RUN', 'num_events')
 					if parser.has_option('RUN', 'time_calib'):
 						self.time_calib = parser.getfloat('RUN', 'time_calib')
+					if parser.has_option('RUN', 'dut'):
+						self.dut = parser.get('RUN', 'dut').lower()
 					if parser.has_option('RUN', 'sample_voltage'):
 						self.bias = parser.getfloat('RUN', 'sample_voltage')
 					if parser.has_option('RUN', 'input_range'):
@@ -95,6 +103,19 @@ class Settings_Caen:
 						self.simultaneous_conversion = bool(parser.getboolean('RUN', 'simultaneous_conversion'))
 					if parser.has_option('RUN', 'plot_waveforms'):
 						self.plot_waveforms = bool(parser.getboolean('RUN', 'plot_waveforms'))
+
+				if parser.has_section('HV'):
+					if parser.has_option('HV', 'path_Pics_folder'):
+						self.pics_folder_path = parser.get('HV', 'path_Pics_folder')
+					if parser.has_option('HV', 'HV_supply'):
+						self.hv_supply = parser.get('HV', 'HV_supply')
+					if parser.has_option('HV', 'ch'):
+						self.hv_supply = parser.getint('HV', 'ch')
+					if parser.has_option('HV', 'current_limit'):
+						self.current_limit = abs(parser.getfloat('HV', 'current_limit'))
+					# TODO: implement option in HV_control for option hot_start = False
+					# if parser.has_option('HV', 'hot_start'):
+					# 	self.hot_start = bool(parser.getboolean('HV', 'hot_start'))
 
 				if parser.has_section('SIGNAL'):
 					if parser.has_option('SIGNAL', 'channel'):
@@ -161,7 +182,7 @@ class Settings_Caen:
 				string1 += '_{s}'.format(s=self.suffix)
 			return string1
 
-		self.filename = '{p}_ccd'.format(p=self.prefix)
+		self.filename = '{d}_{p}_ccd'.format(p=self.prefix, d=self.dut)
 		self.filename = AddSuffix(self.filename)
 
 	def Delay(self, ti=1.0):
