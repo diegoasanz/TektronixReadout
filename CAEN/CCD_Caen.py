@@ -317,7 +317,7 @@ class CCD_Caen:
 		ac_ch = self.anti_co.ch if self.settings.ac_enable else -1
 		ac_offset = self.anti_co.dc_offset_percent if self.settings.ac_enable else -1
 		trig_th_in_volts = self.settings.ADC_to_Volts(self.settings.GetTriggerValueADCs(self.trigger), self.trigger)
-		veto_value = 0 if self.settings.ac_enable else self.anti_co.thr_counts
+		veto_value = self.anti_co.thr_counts if self.settings.ac_enable else 0
 		p = subp.Popen(['python', 'AbstractClasses/Converter_Caen.py', self.settings.outdir, os.getcwd(), self.settings.filename,
 		                str(self.signal.ch), str(self.trigger.ch), str(ac_ch), str(self.settings.points),
 		                str(self.settings.num_events),str(self.settings.struct_len), self.settings.struct_fmt,

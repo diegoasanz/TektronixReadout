@@ -232,12 +232,13 @@ class Converter_Caen:
 		self.trigPos = np.abs(temp_trig_volts - self.trig_value).argmin()
 
 	def IsEventVetoed(self):
+		ipdb.set_trace(context=7)
 		window_around_trigg = 50e-9
 		condition_veto_base_line = np.array(np.abs(self.array_points - self.trigPos) > int(round(window_around_trigg/float(self.time_res))), dtype='?')
 		condition_search = np.array(1 - condition_veto_base_line, dtype='?')
 		mean = np.extract(condition_veto_base_line, self.vetoADC).mean()
 		sigma = np.extract(condition_veto_base_line, self.vetoADC).std()
-		vetoValNew = 4 * sigma if self.veto_value < 0.9 * 4 * self.veto_value else self.veto_value
+		vetoValNew = 4 * sigma if self.veto_value < 0.9 * 4 * sigma else self.veto_value
 		veto_event = bool((np.extract(condition_search, self.vetoADC) - mean + vetoValNew).min() <= 0)
 		return veto_event
 
