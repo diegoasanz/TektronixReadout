@@ -19,8 +19,8 @@ from copy import deepcopy
 # from DataAcquisition import DataAcquisition
 
 class Converter_Caen:
-	def __init__(self, rundir, workingdir, filename, sigCh, trigCh, vetoCh, points, nevents, struct_len, struct_fmt,
-	             adc_res, sig_dcop, trig_dcop, veto_dcop, time_res, post_trig, trig_val, veto_val, dig_bits, sim_conv, time_recal):
+	def __init__(self, rundir, workingdir, filename, sigCh, trigCh, vetoCh, points, nevents, struct_len, struct_fmt, adc_res, sig_dcop, trig_dcop, veto_dcop, time_res, post_trig, trig_val, veto_val,
+	             dig_bits, sim_conv, time_recal, control_hv=False):
 		self.run_dir_location = rundir  # output directory location
 		self.working_dir_location = workingdir  # current directory location, where the raw_wave files are
 		self.filename = filename  # file name for the files
@@ -42,6 +42,10 @@ class Converter_Caen:
 		self.dig_bits = dig_bits  # number of bits of the ADC i.e. 14
 		self.simultaneous_conversion = sim_conv  # whether or not to do the simultaneous conversion while taking data
 		self.time_recal = time_recal  # time between digitiser recalibrations
+		self.control_hv = control_hv
+
+		self.hv_file_name = 'hvfile.txt'
+		self.hv_dict = None
 
 		self.doVeto = True if self.anti_co_ch != -1 else False
 		self.array_points = np.arange(self.points, dtype=np.dtype('int32'))
@@ -49,6 +53,9 @@ class Converter_Caen:
 		self.raw_file = None
 		self.raw_tree = None
 		self.eventBra = self.voltBra = self.trigBra = self.vetoBra = self.timeBra = self.vetoedBra = self.badShapeBra = self.badPedBra = None
+		self.hvVoltageBra = self.hvCurrentBra = None
+		self.hourBra = self.minuteBra = self.secondBra = None
+
 		self.t0 = time.time()
 
 		self.signal_written_events = self.trigger_written_events = self.anti_co_written_events = None
@@ -65,6 +72,10 @@ class Converter_Caen:
 		self.bad_pedstal_event = None
 		self.condition_base_line = None
 		self.condition_peak_pos = None
+		self.hv_voltage_event = None
+		self.hv_current_event = None
+		self.hour_event = self.minute_event = self.second_event = None
+		self.currentTime = None
 
 		self.bar = None
 
@@ -86,6 +97,12 @@ class Converter_Caen:
 		self.timeBra = np.zeros(self.points, 'f8')
 		self.badShapeBra = np.zeros(1, dtype=np.dtype('int8'))  # signed char
 		self.badPedBra = np.zeros(1, '?')
+		if self.control_hv:
+			self.hvVoltageBra = np.zeros(1, 'f')
+			self.hvCurrentBra = np.zeros(1, 'f')
+		self.hourBra = np.zeros(1, dtype=np.dtype('uint8'))  # unsigned char
+		self.minuteBra = np.zeros(1, dtype=np.dtype('uint8'))  # unsigned char
+		self.secondBra = np.zeros(1, 'B')  # unsigned char
 		self.raw_tree.Branch('event', self.eventBra, 'event/i')
 		self.raw_tree.Branch('time', self.timeBra, 'time[{s}]/D'.format(s=self.points))
 		self.raw_tree.Branch('voltageSignal', self.voltBra, 'voltageSignal[{s}]/D'.format(s=self.points))
@@ -95,6 +112,12 @@ class Converter_Caen:
 			self.raw_tree.Branch('vetoedEvent', self.vetoedBra, 'vetoedEvent/O')
 		self.raw_tree.Branch('badShape', self.badShapeBra, 'badShape/B')  # signed char
 		self.raw_tree.Branch('badPedestal', self.badPedBra, 'badPedestal/O')
+		if self.control_hv:
+			self.raw_tree.Branch('voltageHV', self.hvVoltageBra, 'voltageHV/F')
+			self.raw_tree.Branch('currentHV', self.hvCurrentBra, 'currentHV/F')
+		self.raw_tree.Branch('hour', self.hourBra, 'hour/b')
+		self.raw_tree.Branch('minute', self.minuteBra, 'minute/b')
+		self.raw_tree.Branch('second', self.minuteBra, 'second/b')
 
 	def OpenRawBinaries(self):
 		self.fs = open('{wd}/raw_wave{s}.dat'.format(wd=self.working_dir_location, s=self.signal_ch), 'rb')
@@ -155,6 +178,9 @@ class Converter_Caen:
 		if self.doVeto:
 			self.fa.seek(ev * self.struct_len, 0)
 			self.dataa = self.fa.read(self.struct_len)
+		if self.control_hv:
+			self.Read_HV_File()
+		self.currentTime = time.gmtime()
 
 	def CheckData(self):
 		if not self.datas or not self.datat:
@@ -175,6 +201,12 @@ class Converter_Caen:
 			self.vetoedBra.fill(self.vetoed_event)
 		self.badShapeBra.fill(self.bad_shape_event)
 		self.badPedBra.fill(self.bad_pedstal_event)
+		if self.control_hv:
+			self.hvVoltageBra.fill(self.hv_voltage_event)
+			self.hvCurrentBra.fill(self.hv_current_event)
+		self.hourBra.fill(self.currentTime[3])
+		self.minuteBra.fill(self.currentTime[4])
+		self.secondBra.fill(self.currentTime[5])
 
 	def ConvertEvents(self):
 		self.bar.start()
@@ -296,6 +328,16 @@ class Converter_Caen:
 		result = np.multiply(self.adc_res, np.add(adcs, np.multiply(2 ** self.dig_bits - 1.0, offset / 100.0 - 0.5, dtype='f8'), dtype='f8'), dtype='f8')
 		return result
 
+	def Read_HV_File(self):
+		if self.simultaneous_conversion:
+			file = open(self.hv_file_name, 'r')
+			line = file.readline().split()
+		else:
+			line = [0, 0]
+		self.hv_voltage_event, self.hv_current_event = float(line[0]), float(line[1])
+		if self.simultaneous_conversion:
+			file.close()
+
 if __name__ == '__main__':
 	run_dir_location = str(sys.argv[1])  # output directory location
 	working_dir_location = str(sys.argv[2])  # current directory location, where the raw_wave files are
@@ -318,10 +360,11 @@ if __name__ == '__main__':
 	dig_bits = int(sys.argv[19])  # number of bits of the ADC i.e. 14
 	simultaneous_conversion = bool(sys.argv[20] != '0')  # whether or not to do the simultaneous conversion while taking data
 	time_recal = float(sys.argv[21])  # time between digitiser recalibrations
+	control_hv = bool(sys.argv[22] != '0')  # whether or not voltage and currents are controlled
 
 	converter = Converter_Caen(run_dir_location, working_dir_location, filename, signal_ch, trigger_ch, anti_co_ch, points,
 	                           num_events, struct_len, struct_fmt, adc_res, sig_offset, trig_offset, anti_co_offset,
-	                           time_res, post_trig_percent, trig_value, veto_value, dig_bits, simultaneous_conversion, time_recal)
+	                           time_res, post_trig_percent, trig_value, veto_value, dig_bits, simultaneous_conversion, time_recal, control_hv)
 
 	converter.SetupRootFile(sys.argv)
 	converter.GetBinariesWrittenEvents()

@@ -15,6 +15,7 @@ import ipdb
 
 from AbstractClasses.Channel_Caen import Channel_Caen
 from AbstractClasses.Settings_Caen import Settings_Caen
+from AbstractClasses.HV_Control import HV_Control
 
 
 # from DataAcquisition import DataAcquisition
@@ -39,8 +40,14 @@ class CCD_Caen:
 			self.anti_co = Channel_Caen(self.settings.acCh, 'veto', self.verb)
 			self.anti_co.Set_Channel(self.settings)
 		self.fs0, self.ft0, self.fa0 = None, None, None
+		self.hv_control = None
 		self.RemoveFiles()
 
+	def StartHVControl(self):
+		if self.settings.do_hv_control:
+			self.hv_control = HV_Control(self.settings)
+			self.settings.Delay(5)
+			self.hv_control.CheckVoltage()
 
 	def GetBaseLines(self):
 		self.settings.SetupDigitiser(doBaseLines=True, signal=self.signal, trigger=self.trigger, ac=self.anti_co)
@@ -91,6 +98,7 @@ class CCD_Caen:
 
 	def GetWaveforms(self, p, events=1, sig_written=0, trg_written=0, aco_written=0):
 		t1 = time.time()
+		if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 		if events == 1:
 			# while p.poll() is None:
 			self.settings.Delay(1)
@@ -117,6 +125,7 @@ class CCD_Caen:
 			p.stdin.flush()
 			while p.poll() is None:
 				continue
+			if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 			written_events_sig, written_events_trig, written_events_aco = self.ConcatenateBinaries2(0, 0, 0, sig_written, trg_written, aco_written)
 		else:
 			self.settings.Delay(1)
@@ -138,22 +147,28 @@ class CCD_Caen:
 				if time.time() - t1 >= self.settings.time_calib:
 					p.stdin.write('s')
 					p.stdin.flush()
+					self.settings.RemoveBinaries()
 					p.stdin.write('c')
 					p.stdin.flush()
 					p.stdin.write('q')
 					p.stdin.flush()
 					self.settings.Delay(1)
+					if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 				if written_events_sig + sig_written >= events:
 					p.stdin.write('s')
 					p.stdin.flush()
+					self.settings.RemoveBinaries()
 					p.stdin.write('q')
 					p.stdin.flush()
 					self.settings.Delay(1)
+					if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 				written_events_sig, written_events_trig, written_events_aco = self.ConcatenateBinaries2(written_events_sig, written_events_trig, written_events_aco, sig_written, trg_written, aco_written)
+				if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 				if not self.settings.simultaneous_conversion:
 					self.settings.bar.update(int(min(written_events_sig + sig_written, self.settings.num_events)))
 			self.settings.Delay(1)
-			written_events_sig, written_events_trig, written_events_aco = self.ConcatenateBinaries2(written_events_sig, written_events_trig, written_events_aco, sig_written, trg_written, aco_written)
+			if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
+			# written_events_sig, written_events_trig, written_events_aco = self.ConcatenateBinaries2(written_events_sig, written_events_trig, written_events_aco, sig_written, trg_written, aco_written)
 		total_events_sig = self.CalculateEventsWritten(self.signal.ch)
 		total_events_trig = self.CalculateEventsWritten(self.trigger.ch)
 		if self.settings.ac_enable:
@@ -318,26 +333,19 @@ class CCD_Caen:
 		ac_offset = self.anti_co.dc_offset_percent if self.settings.ac_enable else -1
 		trig_th_in_volts = self.settings.ADC_to_Volts(self.settings.GetTriggerValueADCs(self.trigger), self.trigger)
 		veto_value = self.anti_co.thr_counts if self.settings.ac_enable else 0
+		control_hv = 1 if self.settings.do_hv_control and self.settings.simultaneous_conversion else 0
 		p = subp.Popen(['python', 'AbstractClasses/Converter_Caen.py', self.settings.outdir, os.getcwd(), self.settings.filename,
 		                str(self.signal.ch), str(self.trigger.ch), str(ac_ch), str(self.settings.points),
 		                str(self.settings.num_events),str(self.settings.struct_len), self.settings.struct_fmt,
 		                str(self.settings.sigRes), str(self.signal.dc_offset_percent), str(self.trigger.dc_offset_percent),
 		                str(ac_offset), str(self.settings.time_res), str(self.settings.post_trig_percent), str(trig_th_in_volts),
 		                str(veto_value), str(self.settings.dig_bits), str(int(self.settings.simultaneous_conversion)),
-		                str(self.settings.time_calib)], close_fds=True)
+		                str(self.settings.time_calib), str(control_hv)], close_fds=True)
 		return p
 
-	def CreateProgressBar(self, maxVal=1):
-		widgets = [
-			'Processed: ', progressbar.Counter(),
-			' out of {mv} '.format(mv=maxVal), progressbar.Percentage(),
-			' ', progressbar.Bar(marker='>'),
-			' ', progressbar.Timer(),
-			' ', progressbar.ETA()
-			# ' ', progressbar.AdaptativeETA(),
-			#  ' ', progressbar.AdaptativeTransferSpeed()
-		]
-		self.bar = progressbar.ProgressBar(widgets=widgets, maxval=maxVal)
+	def CloseHVClient(self):
+		if self.settings.do_hv_control:
+			self.hv_control.CloseClient()
 
 	def PrintPlotLimits(self, ti=-5.12e-7, tf=4.606e-6, vmin=-0.7, vmax=0.05):
 		print np.double([(tf-ti)/float(self.settings.time_res) +1, ti-self.settings.time_res/2.0,
@@ -355,6 +363,7 @@ if __name__ == '__main__':
 	auto = bool(options.auto)
 	verb = bool(options.verb)
 	ccd = CCD_Caen(infile, verb)
+	ccd.StartHVControl()
 	ccd.GetBaseLines()
 	written_events = ccd.GetData()
 	ccd.settings.num_events = written_events
@@ -364,6 +373,7 @@ if __name__ == '__main__':
 			while pconv.poll() is None:
 				continue
 		ccd.settings.MoveBinaryFiles()
+	ccd.CloseHVClient()
 
 	# ccd.SetOutputFilesNames()
 	# ccd.TakeTwoWaves()

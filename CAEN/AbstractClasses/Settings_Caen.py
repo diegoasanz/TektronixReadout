@@ -35,10 +35,12 @@ class Settings_Caen:
 		self.simultaneous_conversion = False
 		self.plot_waveforms = False
 		self.time_res = 2e-9
+		self.do_hv_control = False
 		self.pics_folder_path = ''
 		self.hv_supply = ''
 		self.hv_ch = 0
 		self.current_limit = 0
+		self.hv_ramp = 10  # in V/s
 		self.hot_start = True
 		self.sigCh = 0
 		self.trigCh = 1
@@ -109,10 +111,14 @@ class Settings_Caen:
 						self.pics_folder_path = parser.get('HV', 'path_Pics_folder')
 					if parser.has_option('HV', 'HV_supply'):
 						self.hv_supply = parser.get('HV', 'HV_supply')
+						if self.hv_supply != '':
+							self.do_hv_control = True
 					if parser.has_option('HV', 'ch'):
-						self.hv_supply = parser.getint('HV', 'ch')
+						self.hv_ch = parser.getint('HV', 'ch')
 					if parser.has_option('HV', 'current_limit'):
 						self.current_limit = abs(parser.getfloat('HV', 'current_limit'))
+					if parser.has_option('HV', 'ramp'):
+						self.hv_ramp = abs(parser.getfloat('HV', 'ramp'))
 					# TODO: implement option in HV_control for option hot_start = False
 					# if parser.has_option('HV', 'hot_start'):
 					# 	self.hot_start = bool(parser.getboolean('HV', 'hot_start'))
@@ -280,10 +286,10 @@ class Settings_Caen:
 		print 'Done'
 
 	def RemoveBinaries(self):
-		os.remove('wave{s}.dat'.format(s=self.sigCh))
-		os.remove('wave{t}.dat'.format(t=self.trigCh))
-		if self.ac_enable:
-			os.remove('wave{a}.dat'.format(a=self.acCh))
+		channels = [self.sigCh, self.trigCh, self.acCh] if self.ac_enable else [self.sigCh, self.trigCh]
+		for ch in channels:
+			if os.path.isfile('waves{c}.dat'.format(c=ch)):
+				os.remove('wave{c}.dat'.format(c=ch))
 
 	def CreateProgressBar(self, maxVal=1):
 		widgets = [
