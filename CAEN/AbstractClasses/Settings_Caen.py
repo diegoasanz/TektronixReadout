@@ -288,7 +288,7 @@ class Settings_Caen:
 	def RemoveBinaries(self):
 		channels = [self.sigCh, self.trigCh, self.acCh] if self.ac_enable else [self.sigCh, self.trigCh]
 		for ch in channels:
-			if os.path.isfile('waves{c}.dat'.format(c=ch)):
+			if os.path.isfile('wave{c}.dat'.format(c=ch)):
 				os.remove('wave{c}.dat'.format(c=ch))
 
 	def CreateProgressBar(self, maxVal=1):

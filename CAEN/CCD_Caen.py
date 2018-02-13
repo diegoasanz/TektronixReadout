@@ -16,6 +16,7 @@ import ipdb
 from AbstractClasses.Channel_Caen import Channel_Caen
 from AbstractClasses.Settings_Caen import Settings_Caen
 from AbstractClasses.HV_Control import HV_Control
+from AbstractClasses.Utils import Utils
 
 
 # from DataAcquisition import DataAcquisition
@@ -41,6 +42,7 @@ class CCD_Caen:
 			self.anti_co.Set_Channel(self.settings)
 		self.fs0, self.ft0, self.fa0 = None, None, None
 		self.hv_control = None
+		self.utils = Utils(self.settings)
 		self.RemoveFiles()
 
 	def StartHVControl(self):
@@ -127,6 +129,7 @@ class CCD_Caen:
 				continue
 			if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 			written_events_sig, written_events_trig, written_events_aco = self.ConcatenateBinaries2(0, 0, 0, sig_written, trg_written, aco_written)
+			self.settings.RemoveBinaries()
 		else:
 			self.settings.Delay(1)
 			p.stdin.write('c')
@@ -154,7 +157,7 @@ class CCD_Caen:
 					p.stdin.flush()
 					self.settings.Delay(1)
 					if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
-				if written_events_sig + sig_written >= events:
+				elif written_events_sig + sig_written >= events:
 					p.stdin.write('s')
 					p.stdin.flush()
 					self.settings.RemoveBinaries()
@@ -162,10 +165,11 @@ class CCD_Caen:
 					p.stdin.flush()
 					self.settings.Delay(1)
 					if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
-				written_events_sig, written_events_trig, written_events_aco = self.ConcatenateBinaries2(written_events_sig, written_events_trig, written_events_aco, sig_written, trg_written, aco_written)
-				if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
-				if not self.settings.simultaneous_conversion:
-					self.settings.bar.update(int(min(written_events_sig + sig_written, self.settings.num_events)))
+				else:
+					written_events_sig, written_events_trig, written_events_aco = self.ConcatenateBinaries2(written_events_sig, written_events_trig, written_events_aco, sig_written, trg_written, aco_written)
+					if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
+					if not self.settings.simultaneous_conversion:
+						self.settings.bar.update(int(min(written_events_sig + sig_written, self.settings.num_events)))
 			self.settings.Delay(1)
 			if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 			# written_events_sig, written_events_trig, written_events_aco = self.ConcatenateBinaries2(written_events_sig, written_events_trig, written_events_aco, sig_written, trg_written, aco_written)
@@ -195,46 +199,47 @@ class CCD_Caen:
 		sys.stdout.flush()
 		shutil.move('tempMerge.dat', fbase)
 
-	def ConcatenateBinaries2(self, written_events_sig, written_events_trig, written_events_aco, sig_written, trg_written, aco_written):
-		self.fs0.flush()
-		self.ft0.flush()
-		if self.settings.ac_enable:
-			self.fa0.flush()
-		measured_signal_data = measured_trigger_data = measured_antico_data = 0
+	def ConcatenateBinaries2(self, session_written_events_sig, session_written_events_trig, session_written_events_aco, previous_session_written_sig, previous_session_written_trig, previous_session_written_aco):
+		# self.fs0.flush()
+		# self.ft0.flush()
+		# if self.settings.ac_enable:
+		# 	self.fa0.flush()
+		session_measured_data_sig = session_measured_data_trig = session_measured_data_aco = 0
 		if os.path.isfile('wave{s}.dat'.format(s=self.signal.ch)) and os.path.isfile('wave{t}.dat'.format(t=self.trigger.ch)):
-			measured_signal_data = int(os.path.getsize('wave{s}.dat'.format(s=self.signal.ch)))
-			measured_trigger_data = int(os.path.getsize('wave{t}.dat'.format(t=self.trigger.ch)))
+			session_measured_data_sig = int(os.path.getsize('wave{s}.dat'.format(s=self.signal.ch)))
+			session_measured_data_trig = int(os.path.getsize('wave{t}.dat'.format(t=self.trigger.ch)))
 			if self.settings.ac_enable and os.path.isfile('wave{a}.dat'.format(a=self.anti_co.ch)):
-				measured_antico_data = int(os.path.getsize('wave{a}.dat'.format(a=self.anti_co.ch)))
+				session_measured_data_aco = int(os.path.getsize('wave{a}.dat'.format(a=self.anti_co.ch)))
 
-		merged_signal_data = int(self.fs0.tell())
-		merged_trigger_data = int(self.ft0.tell())
-		doMerge = (measured_signal_data + sig_written * self.settings.struct_len > merged_signal_data) and (measured_trigger_data + trg_written * self.settings.struct_len > merged_trigger_data)
+		total_merged_data_sig = int(self.fs0.tell())
+		total_merged_data_trig = int(self.ft0.tell())
+		doMerge = (session_measured_data_sig + previous_session_written_sig * self.settings.struct_len > total_merged_data_sig) and (session_measured_data_trig + previous_session_written_trig * self.settings.struct_len > total_merged_data_trig)
 		if self.settings.ac_enable:
-			merged_antico_data = int(self.fa0.tell())
-			doMerge = doMerge and (measured_antico_data + aco_written * self.settings.struct_len > merged_antico_data)
+			total_merged_data_aco = int(self.fa0.tell())
+			doMerge = doMerge and (session_measured_data_aco + previous_session_written_aco * self.settings.struct_len > total_merged_data_aco)
+
 		if doMerge:
-			min_measured_data = min(measured_signal_data, measured_trigger_data)
+			min_measured_data = min(session_measured_data_sig, session_measured_data_trig)
 			if self.settings.ac_enable:
-				min_measured_data = min(min_measured_data, measured_antico_data)
-			data_to_write_sig = min_measured_data - merged_signal_data + sig_written * self.settings.struct_len
-			data_to_write_trg = min_measured_data - merged_trigger_data + trg_written * self.settings.struct_len
+				min_measured_data = min(min_measured_data, session_measured_data_aco)
+			data_to_write_sig = min_measured_data - total_merged_data_sig + previous_session_written_sig * self.settings.struct_len
+			data_to_write_trg = min_measured_data - total_merged_data_trig + previous_session_written_trig * self.settings.struct_len
 			min_data_to_write = min(data_to_write_sig, data_to_write_trg)
 			if self.settings.ac_enable:
-				data_to_write_aco = min_measured_data - merged_antico_data + aco_written * self.settings.struct_len
+				data_to_write_aco = min_measured_data - total_merged_data_aco + previous_session_written_aco * self.settings.struct_len
 				min_data_to_write = min(min_data_to_write, data_to_write_aco)
 			events_to_write = int(np.floor(min_data_to_write / float(self.settings.struct_len)))
 			read_size = events_to_write * self.settings.struct_len
 
 			fins = file('wave{s}.dat'.format(s=self.signal.ch), 'rb')
-			fins.seek(written_events_sig * self.settings.struct_len, 0)
+			fins.seek(session_written_events_sig * self.settings.struct_len, 0)
 			datas = fins.read(read_size)
 			self.fs0.write(datas)
 			self.fs0.flush()
 			fins.close()
 
 			fint = file('wave{t}.dat'.format(t=self.trigger.ch), 'rb')
-			fint.seek(written_events_trig * self.settings.struct_len, 0)
+			fint.seek(session_written_events_trig * self.settings.struct_len, 0)
 			datat = fint.read(read_size)
 			self.ft0.write(datat)
 			self.ft0.flush()
@@ -242,19 +247,21 @@ class CCD_Caen:
 
 			if self.settings.ac_enable:
 				fina = file('wave{a}.dat'.format(a=self.anti_co.ch), 'rb')
-				fina.seek(written_events_aco * self.settings.struct_len, 0)
+				fina.seek(session_written_events_aco * self.settings.struct_len, 0)
 				dataa = fina.read(read_size)
 				self.fa0.write(dataa)
 				self.fa0.flush()
 				fina.close()
-			written_events_sig += int(round(read_size/float(self.settings.struct_len)))
-			written_events_trig += int(round(read_size/float(self.settings.struct_len)))
-			written_events_aco += int(round(read_size/float(self.settings.struct_len)))
-		self.fs0.flush()
-		self.ft0.flush()
-		if self.settings.ac_enable:
-			self.fa0.flush()
-		return written_events_sig, written_events_trig, written_events_aco
+
+			session_written_events_sig += int(events_to_write)
+			session_written_events_trig += int(events_to_write)
+			session_written_events_aco += int(events_to_write)
+
+		# self.fs0.flush()
+		# self.ft0.flush()
+		# if self.settings.ac_enable:
+		# 	self.fa0.flush()
+		return session_written_events_sig, session_written_events_trig, session_written_events_aco
 
 	def CalculateEventsWritten(self, ch):
 		events_written = int(round(float(os.path.getsize('raw_wave{c}.dat'.format(c=ch))) / float(self.settings.struct_len)))
@@ -350,6 +357,8 @@ class CCD_Caen:
 	def PrintPlotLimits(self, ti=-5.12e-7, tf=4.606e-6, vmin=-0.7, vmax=0.05):
 		print np.double([(tf-ti)/float(self.settings.time_res) +1, ti-self.settings.time_res/2.0,
 		                      tf+self.settings.time_res/2.0, (vmax-vmin)/self.settings.sigRes, vmin, vmax])
+
+
 
 if __name__ == '__main__':
 	parser = OptionParser()

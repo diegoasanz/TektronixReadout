@@ -125,7 +125,7 @@ class Converter_Caen:
 		if self.doVeto:
 			self.fa = open('{wd}/raw_wave{a}.dat'.format(wd=self.working_dir_location, a=self.anti_co_ch), 'rb')
 
-	def GetBinariesWrittenEvents(self):
+	def GetBinariesNumberWrittenEvents(self):
 		self.signal_written_events = int(round(os.path.getsize('{d}/raw_wave{s}.dat'.format(d=self.working_dir_location, s=self.signal_ch)) / self.struct_len))
 		self.trigger_written_events = int(round(os.path.getsize('{d}/raw_wave{t}.dat'.format(d=self.working_dir_location, t=self.trigger_ch)) / self.struct_len))
 		if self.doVeto:
@@ -162,7 +162,7 @@ class Converter_Caen:
 				if self.doVeto:
 					if not self.fa.closed:
 						self.fa.close()
-				self.GetBinariesWrittenEvents()
+				self.GetBinariesNumberWrittenEvents()
 				self.CheckFilesSizes(ev)
 				if not self.wait_for_data:
 					self.OpenRawBinaries()
@@ -367,7 +367,7 @@ if __name__ == '__main__':
 	                           time_res, post_trig_percent, trig_value, veto_value, dig_bits, simultaneous_conversion, time_recal, control_hv)
 
 	converter.SetupRootFile(sys.argv)
-	converter.GetBinariesWrittenEvents()
+	converter.GetBinariesNumberWrittenEvents()
 	converter.OpenRawBinaries()
 	converter.CreateProgressBar(converter.num_events)
 	converter.ConvertEvents()
