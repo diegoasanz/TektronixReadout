@@ -280,12 +280,18 @@ class Converter_Caen:
 
 	def IsPedestalBad(self):
 		sigma = np.extract(self.condition_base_line, self.sigADC).std()
+		mean = np.extract(self.condition_base_line, self.sigADC).mean()
 		sigma_volts = sigma * self.adc_res
+		mean_volts = mean * self.adc_res
 		diff_volts = abs(int(self.sigADC[0]) - int(self.sigADC[self.trigPos])) * self.adc_res
-		if sigma_volts >= 2e-3 or diff_volts >= 15e-3:
+		if sigma_volts >= 2e-3 or diff_volts >= 15e-3:  # if a signal is not flat enough due to previous unstable states
 			return True
 		else:
-			return False
+			last_sig = self.sigADC[-1] * self.adc_res
+			if abs(last_sig - mean_volts) > 75e-3:  # if a signal does not return to base line due to multiple effects
+				return True
+			else:  # when the signal pedestal is well behaved and the signal returns to baseline
+				return False
 
 	def DefineSignalBaseLineAndPeakPosition(self):
 		self.condition_base_line = np.array(self.array_points <= self.trigPos, dtype='?')
