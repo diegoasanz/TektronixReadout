@@ -54,7 +54,8 @@ class Converter_Caen:
 		self.raw_tree = None
 		self.eventBra = self.voltBra = self.trigBra = self.vetoBra = self.timeBra = self.vetoedBra = self.badShapeBra = self.badPedBra = None
 		self.hvVoltageBra = self.hvCurrentBra = None
-		self.hourBra = self.minuteBra = self.secondBra = None
+		# self.hourBra = self.minuteBra = self.secondBra = None
+		self.hourMinSecBra = None
 
 		self.t0 = time.time()
 
@@ -75,7 +76,8 @@ class Converter_Caen:
 		self.hv_voltage_event = None
 		self.hv_current_event = None
 		self.hour_event = self.minute_event = self.second_event = None
-		self.currentTime = None
+		# self.hour_min_sec_event = None
+		# self.currentTime = None
 
 		self.bar = None
 
@@ -100,9 +102,10 @@ class Converter_Caen:
 		if self.control_hv:
 			self.hvVoltageBra = np.zeros(1, 'f')
 			self.hvCurrentBra = np.zeros(1, 'f')
-		self.hourBra = np.zeros(1, dtype=np.dtype('uint8'))  # unsigned char
-		self.minuteBra = np.zeros(1, dtype=np.dtype('uint8'))  # unsigned char
-		self.secondBra = np.zeros(1, 'B')  # unsigned char
+		# self.hourBra = np.zeros(1, dtype=np.dtype('uint8'))  # unsigned char
+		# self.minuteBra = np.zeros(1, dtype=np.dtype('uint8'))  # unsigned char
+		# self.secondBra = np.zeros(1, 'B')  # unsigned char
+		self.hourMinSecBra = ro.TDatime()
 		self.raw_tree.Branch('event', self.eventBra, 'event/i')
 		self.raw_tree.Branch('time', self.timeBra, 'time[{s}]/D'.format(s=self.points))
 		self.raw_tree.Branch('voltageSignal', self.voltBra, 'voltageSignal[{s}]/D'.format(s=self.points))
@@ -115,9 +118,10 @@ class Converter_Caen:
 		if self.control_hv:
 			self.raw_tree.Branch('voltageHV', self.hvVoltageBra, 'voltageHV/F')
 			self.raw_tree.Branch('currentHV', self.hvCurrentBra, 'currentHV/F')
-		self.raw_tree.Branch('hour', self.hourBra, 'hour/b')
-		self.raw_tree.Branch('minute', self.minuteBra, 'minute/b')
-		self.raw_tree.Branch('second', self.minuteBra, 'second/b')
+		# self.raw_tree.Branch('hour', self.hourBra, 'hour/b')
+		# self.raw_tree.Branch('minute', self.minuteBra, 'minute/b')
+		# self.raw_tree.Branch('second', self.secondBra, 'second/b')
+		self.raw_tree.Branch('timeHV', self.hourMinSecBra)
 
 	def OpenRawBinaries(self):
 		self.fs = open('{wd}/raw_wave{s}.dat'.format(wd=self.working_dir_location, s=self.signal_ch), 'rb')
@@ -180,7 +184,7 @@ class Converter_Caen:
 			self.dataa = self.fa.read(self.struct_len)
 		if self.control_hv:
 			self.Read_HV_File()
-		self.currentTime = time.gmtime()
+		# self.currentTime = time.gmtime()
 
 	def CheckData(self):
 		if not self.datas or not self.datat:
@@ -204,9 +208,10 @@ class Converter_Caen:
 		if self.control_hv:
 			self.hvVoltageBra.fill(self.hv_voltage_event)
 			self.hvCurrentBra.fill(self.hv_current_event)
-		self.hourBra.fill(self.currentTime[3])
-		self.minuteBra.fill(self.currentTime[4])
-		self.secondBra.fill(self.currentTime[5])
+		# self.hourBra.fill(self.currentTime[3])
+		# self.minuteBra.fill(self.currentTime[4])
+		# self.secondBra.fill(self.currentTime[5])
+		self.hourMinSecBra.Set()
 
 	def ConvertEvents(self):
 		self.bar.start()
@@ -285,7 +290,7 @@ class Converter_Caen:
 	def DefineSignalBaseLineAndPeakPosition(self):
 		self.condition_base_line = np.array(self.array_points <= self.trigPos, dtype='?')
 		# values 2.2 and 0.5 us come from shape of signal
-		self.condition_peak_pos = np.array(np.abs(self.array_points - (2.2e-6/float(self.time_res) + self.trigPos)) <= 0.6e-6/float(self.time_res), dtype='?')
+		self.condition_peak_pos = np.array(np.abs(self.array_points - (2.2e-6/float(self.time_res) + self.trigPos)) <= 0.5e-6/float(self.time_res), dtype='?')
 
 	def IsEventBadShape(self):
 		# mean = np.extract(self.condition_base_line, self.sigADC).mean()
