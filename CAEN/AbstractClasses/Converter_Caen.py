@@ -19,14 +19,14 @@ from copy import deepcopy
 # from DataAcquisition import DataAcquisition
 
 class Converter_Caen:
-	def __init__(self, rundir, workingdir, filename, sigCh, trigCh, vetoCh, points, nevents, struct_len, struct_fmt, adc_res, sig_dcop, trig_dcop, veto_dcop, time_res, post_trig, trig_val, veto_val,
+	def __init__(self, rundir, workingdir, filename, sigPath, trigPath, vetoPath, points, nevents, struct_len, struct_fmt, adc_res, sig_dcop, trig_dcop, veto_dcop, time_res, post_trig, trig_val, veto_val,
 	             dig_bits, sim_conv, time_recal, control_hv=False):
 		self.run_dir_location = rundir  # output directory location
 		self.working_dir_location = workingdir  # current directory location, where the raw_wave files are
 		self.filename = filename  # file name for the files
-		self.signal_ch = sigCh  # caen channel for the ccd signal
-		self.trigger_ch = trigCh  # caen channel for the trigger signal
-		self.anti_co_ch = vetoCh  # caen channel for the veto scintillator signal
+		self.signal_path = sigPath  # caen channel for the ccd signal
+		self.trigger_path = trigPath  # caen channel for the trigger signal
+		self.anti_co_path = vetoPath  # caen channel for the veto scintillator signal
 		self.points = points  # caen number of points in each event
 		self.num_events = nevents  # number of events to convert
 		self.struct_len = struct_len  # structure length (obtained from struct_fmt and struct.calcsize(self.struct_fmt)
@@ -47,7 +47,7 @@ class Converter_Caen:
 		self.hv_file_name = 'hvfile.txt'
 		self.hv_dict = None
 
-		self.doVeto = True if self.anti_co_ch != -1 else False
+		self.doVeto = True if self.anti_co_path != '' else False
 		self.array_points = np.arange(self.points, dtype=np.dtype('int32'))
 
 		self.raw_file = None
@@ -124,16 +124,16 @@ class Converter_Caen:
 		self.raw_tree.Branch('timeHV', self.hourMinSecBra)
 
 	def OpenRawBinaries(self):
-		self.fs = open('{wd}/raw_wave{s}.dat'.format(wd=self.working_dir_location, s=self.signal_ch), 'rb')
-		self.ft = open('{wd}/raw_wave{t}.dat'.format(wd=self.working_dir_location, t=self.trigger_ch), 'rb')
+		self.fs = open('{wd}/{s}'.format(wd=self.working_dir_location, s=self.signal_path), 'rb')
+		self.ft = open('{wd}/{t}'.format(wd=self.working_dir_location, t=self.trigger_path), 'rb')
 		if self.doVeto:
-			self.fa = open('{wd}/raw_wave{a}.dat'.format(wd=self.working_dir_location, a=self.anti_co_ch), 'rb')
+			self.fa = open('{wd}/{a}'.format(wd=self.working_dir_location, a=self.anti_co_path), 'rb')
 
 	def GetBinariesNumberWrittenEvents(self):
-		self.signal_written_events = int(round(os.path.getsize('{d}/raw_wave{s}.dat'.format(d=self.working_dir_location, s=self.signal_ch)) / self.struct_len))
-		self.trigger_written_events = int(round(os.path.getsize('{d}/raw_wave{t}.dat'.format(d=self.working_dir_location, t=self.trigger_ch)) / self.struct_len))
+		self.signal_written_events = int(round(os.path.getsize('{d}/{s}'.format(d=self.working_dir_location, s=self.signal_path)) / self.struct_len))
+		self.trigger_written_events = int(round(os.path.getsize('{d}/{t}'.format(d=self.working_dir_location, t=self.trigger_path)) / self.struct_len))
 		if self.doVeto:
-			self.anti_co_written_events = int(round(os.path.getsize('{d}/raw_wave{a}.dat'.format(d=self.working_dir_location, a=self.anti_co_ch)) / self.struct_len))
+			self.anti_co_written_events = int(round(os.path.getsize('{d}/{a}'.format(d=self.working_dir_location, a=self.anti_co_path)) / self.struct_len))
 
 	def CreateProgressBar(self, maxVal=1):
 		widgets = [
@@ -353,13 +353,13 @@ if __name__ == '__main__':
 	run_dir_location = str(sys.argv[1])  # output directory location
 	working_dir_location = str(sys.argv[2])  # current directory location, where the raw_wave files are
 	filename = str(sys.argv[3])  # file name for the files
-	signal_ch = int(sys.argv[4])  # caen channel for the ccd signal
-	trigger_ch = int(sys.argv[5])  # caen channel for the trigger signal
-	anti_co_ch = int(sys.argv[6])  # caen channel for the veto scintillator signal
-	points = int(sys.argv[7])  # caen number of points in each event
+	signal_path = str(sys.argv[4])  # caen channel for the ccd signal
+	trigger_path = str(sys.argv[5])  # caen channel for the trigger signal
+	anti_co_path = str(sys.argv[6])  # caen channel for the veto scintillator signal if no anti coincidence then this should be ''
+	points = int(sys.argv[7])  # caen number of points in each event i.e. time window devided by time resolution
 	num_events = int(sys.argv[8])  # number of events to convert
-	struct_len = int(sys.argv[9])  # structure length (obtained from struct_fmt and struct.calcsize(self.struct_fmt)
-	struct_fmt = str(sys.argv[10])  # structure format of the data per event i.e. '@{p}H'.format(p=self.points)
+	struct_len = int(sys.argv[9])  # structure length (obtained from struct_fmt and struct.calcsize(self.struct_fmt). e.g. 5120
+	struct_fmt = str(sys.argv[10])  # structure format of the data per event i.e. '@{p}H'.format(p=self.points). e.g. '@2560H'
 	adc_res = np.double(sys.argv[11])  # adc resolution of the digitizer
 	sig_offset = float(sys.argv[12])  # percentage offset for ccd signal (value within [-50, 50]) look at wavedump config file
 	trig_offset = float(sys.argv[13])  # percentage offset for trigger signal (value within [-50, 50]) look at wavedump config file
@@ -373,7 +373,7 @@ if __name__ == '__main__':
 	time_recal = float(sys.argv[21])  # time between digitiser recalibrations
 	control_hv = bool(sys.argv[22] != '0')  # whether or not voltage and currents are controlled
 
-	converter = Converter_Caen(run_dir_location, working_dir_location, filename, signal_ch, trigger_ch, anti_co_ch, points,
+	converter = Converter_Caen(run_dir_location, working_dir_location, filename, signal_path, trigger_path, anti_co_path, points,
 	                           num_events, struct_len, struct_fmt, adc_res, sig_offset, trig_offset, anti_co_offset,
 	                           time_res, post_trig_percent, trig_value, veto_value, dig_bits, simultaneous_conversion, time_recal, control_hv)
 

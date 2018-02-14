@@ -46,9 +46,11 @@ class CCD_Caen:
 		self.RemoveFiles()
 
 	def StartHVControl(self):
+		wait_time = 7
 		if self.settings.do_hv_control:
 			self.hv_control = HV_Control(self.settings)
-			self.settings.Delay(5)
+			print 'Waiting {t} seconds for the HVClient to start...'.format(t=wait_time)
+			self.settings.Delay(wait_time)
 			self.hv_control.CheckVoltage()
 
 	def GetBaseLines(self):
@@ -341,8 +343,13 @@ class CCD_Caen:
 		trig_th_in_volts = self.settings.ADC_to_Volts(self.settings.GetTriggerValueADCs(self.trigger), self.trigger)
 		veto_value = self.anti_co.thr_counts if self.settings.ac_enable else 0
 		control_hv = 1 if self.settings.do_hv_control and self.settings.simultaneous_conversion else 0
+		bin_pat_sig = 'raw_wave{s}.dat'.format(s=self.signal.ch) if self.settings.simultaneous_conversion else '{d}/Runs/{f}_signal.dat'.format(wd=os.getcwd(), d=self.settings.outdir, f=self.settings.filename)
+		bin_pat_trig = 'raw_wave{t}.dat'.format(t=self.trigger.ch) if self.settings.simultaneous_conversion else '{d}/Runs/{f}_trigger.dat'.format(wd=os.getcwd(), d=self.settings.outdir, f=self.settings.filename)
+		bin_pat_ac = ''
+		if self.settings.ac_enable:
+			bin_pat_ac = 'raw_wave{a}.dat'.format(a=self.anti_co.ch) if self.settings.simultaneous_conversion else '{d}/Runs/{f}_veto.dat'.format(wd=os.getcwd(), d=self.settings.outdir, f=self.settings.filename)
 		p = subp.Popen(['python', 'AbstractClasses/Converter_Caen.py', self.settings.outdir, os.getcwd(), self.settings.filename,
-		                str(self.signal.ch), str(self.trigger.ch), str(ac_ch), str(self.settings.points),
+		                str(bin_pat_sig), str(bin_pat_trig), str(bin_pat_ac), str(self.settings.points),
 		                str(self.settings.num_events),str(self.settings.struct_len), self.settings.struct_fmt,
 		                str(self.settings.sigRes), str(self.signal.dc_offset_percent), str(self.trigger.dc_offset_percent),
 		                str(ac_offset), str(self.settings.time_res), str(self.settings.post_trig_percent), str(trig_th_in_volts),
@@ -376,13 +383,13 @@ if __name__ == '__main__':
 	ccd.GetBaseLines()
 	written_events = ccd.GetData()
 	ccd.settings.num_events = written_events
+	ccd.settings.MoveBinaryFiles()
+	ccd.CloseHVClient()
 	if auto:
 		if not ccd.settings.simultaneous_conversion:
 			pconv = ccd.CreateRootFile()
 			while pconv.poll() is None:
 				continue
-		ccd.settings.MoveBinaryFiles()
-	ccd.CloseHVClient()
 
 	# ccd.SetOutputFilesNames()
 	# ccd.TakeTwoWaves()
