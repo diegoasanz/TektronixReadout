@@ -90,6 +90,8 @@ class Converter_Caen:
 			print 'Start creating root file'
 		self.raw_file = ro.TFile('{wd}/{d}/Runs/{r}.root'.format(wd=self.working_dir_location, d=self.run_dir_location, r=self.filename), 'RECREATE')
 		self.raw_tree = ro.TTree(self.filename, self.filename)
+		self.raw_tree.SetAutoFlush(100)
+		self.raw_tree.SetAutoSave(-10485760)
 		if self.doVeto:
 			self.vetoBra = np.zeros(self.points, 'f8')
 			self.vetoedBra = np.zeros(1, '?')
@@ -153,9 +155,9 @@ class Converter_Caen:
 			self.wait_for_data = bool(self.wait_for_data or (self.anti_co_written_events <= ev))
 
 	def WaitForData(self, ev, t1):
+		time_break = int(np.ceil(self.time_recal + 30))
 		while self.wait_for_data:
 			if self.simultaneous_conversion:
-				time_break = int(np.ceil(self.time_recal + 20))
 				if time.time() - t1 > time_break:
 					print 'No data has been saved in file for event {ev} in the past {t} seconds... exiting!'.format(ev=ev, t=time_break)
 					exit()
@@ -215,7 +217,6 @@ class Converter_Caen:
 
 	def ConvertEvents(self):
 		self.bar.start()
-
 		for ev in xrange(self.num_events):
 			t1 = time.time()
 			self.CheckFilesSizes(ev)
@@ -239,6 +240,8 @@ class Converter_Caen:
 			self.bad_shape_event = self.IsEventBadShape()
 			self.bad_pedstal_event = self.IsPedestalBad()
 			self.FillBranches(ev)
+			if ev == 10:
+				self.raw_tree.OptimizeBaskets()
 			numFil = self.raw_tree.Fill()
 			self.bar.update(ev + 1)
 
@@ -247,15 +250,17 @@ class Converter_Caen:
 		self.raw_file.Write()
 		self.raw_file.Close()
 		self.fs.close()
+		del self.fs
 		self.ft.close()
+		del self.ft
 		if self.doVeto:
 			self.fa.close()
+			del self.fa
 		self.t0 = time.time() - self.t0
 		print 'Time creating root tree:', self.t0, 'seconds'
 		exit()
 
 	def LookForTime0(self):
-		# ipdb.set_trace(context=7)
 		guess_pos = int(round(self.points * (100.0 - self.post_trig_percent)/100.0))
 		condition_trigg = np.array(np.abs(self.array_points - guess_pos) <= int(round(0.1e-6/self.time_res)), dtype='?')
 		condition_no_trigg = np.array(1 - condition_trigg, dtype='?')
@@ -348,6 +353,8 @@ class Converter_Caen:
 		self.hv_voltage_event, self.hv_current_event = float(line[0]), float(line[1])
 		if self.simultaneous_conversion:
 			file.close()
+			del file
+
 
 if __name__ == '__main__':
 	run_dir_location = str(sys.argv[1])  # output directory location

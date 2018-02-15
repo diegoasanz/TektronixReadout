@@ -18,9 +18,7 @@ from AbstractClasses.Settings_Caen import Settings_Caen
 from AbstractClasses.HV_Control import HV_Control
 from AbstractClasses.Utils import Utils
 
-
-# from DataAcquisition import DataAcquisition
-
+trig_rand_time = 0.5
 
 class CCD_Caen:
 	def __init__(self, infile='None', verbose=False):
@@ -58,7 +56,7 @@ class CCD_Caen:
 		p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD_BL.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE, close_fds=True)
 		t0 = time.time()
 		self.CreateEmptyFiles()
-		events_written = self.GetWaveforms(p, events=1)
+		events_written = self.GetWaveforms(p, events=1, stdin=True, stdout=False)
 		if events_written >= 1:
 			self.CloseFiles()
 			self.ReadBaseLines()
@@ -100,7 +98,7 @@ class CCD_Caen:
 		if self.settings.ac_enable:
 			self.fa0.close()
 
-	def GetWaveforms(self, p, events=1, sig_written=0, trg_written=0, aco_written=0):
+	def GetWaveforms(self, p, events=1, sig_written=0, trg_written=0, aco_written=0, stdin=False, stdout=False):
 		t1 = time.time()
 		if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 		if events == 1:
@@ -130,6 +128,7 @@ class CCD_Caen:
 			while p.poll() is None:
 				continue
 			if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
+			self.CloseSubprocess(p=p, stdin=stdin, stdout=stdout)
 			written_events_sig, written_events_trig, written_events_aco = self.ConcatenateBinaries2(0, 0, 0, sig_written, trg_written, aco_written)
 			self.settings.RemoveBinaries()
 		else:
@@ -148,6 +147,7 @@ class CCD_Caen:
 			p.stdin.flush()
 			written_events_sig = written_events_trig = written_events_aco = 0
 			# self.settings.Delay(1)
+			t2 = time.time()
 			while p.poll() is None:
 				if time.time() - t1 >= self.settings.time_calib:
 					p.stdin.write('s')
@@ -159,6 +159,7 @@ class CCD_Caen:
 					p.stdin.flush()
 					self.settings.Delay(1)
 					if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
+					self.CloseSubprocess(p=p, stdin=stdin, stdout=stdout)
 				elif written_events_sig + sig_written >= events:
 					p.stdin.write('s')
 					p.stdin.flush()
@@ -167,7 +168,12 @@ class CCD_Caen:
 					p.stdin.flush()
 					self.settings.Delay(1)
 					if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
+					self.CloseSubprocess(p=p, stdin=stdin, stdout=stdout)
 				else:
+					if self.settings.random_test and (time.time() - t2 > trig_rand_time):
+						p.stdin.write('t')
+						p.stdin.flush()
+						t2 = time.time()
 					written_events_sig, written_events_trig, written_events_aco = self.ConcatenateBinaries2(written_events_sig, written_events_trig, written_events_aco, sig_written, trg_written, aco_written)
 					if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 					if not self.settings.simultaneous_conversion:
@@ -189,6 +195,34 @@ class CCD_Caen:
 		else:
 			print 'Written events are of different sizes. Missmatch. quitting...'
 			exit()
+
+	def CloseSubprocess(self, p, stdin=False, stdout=False):
+		pid = p.pid
+		if stdin:
+			p.stdin.close()
+		if stdout:
+			p.stdout.close()
+		if p.wait() is None:
+			print 'Could not terminate subprocess... forcing termination'
+			p.kill()
+			if p.wait() is None:
+				print 'Could not kill subprocess... quitting'
+				exit()
+		try:
+			os.kill(pid, 0)
+		except OSError:
+			pass
+		else:
+			print 'The subprocess is still running. Killing it with os.kill'
+			os.kill(pid, 15)
+			try:
+				os.kill(pid, 0)
+			except OSError:
+				pass
+			else:
+				print 'The process does not die... quitting program'
+				exit()
+		del p
 
 	def ConcatenateBinaries(self, fbase, fadd):
 		fbin3 = file('tempMerge.dat', 'wb')
@@ -285,7 +319,6 @@ class CCD_Caen:
 			acADCs = np.array(ac, 'H')
 			mean_ac = acADCs.mean()
 			std_ac = acADCs.std()
-			# ipdb.set_trace(context=5)
 		for i in xrange(10):
 			condition_t = (np.abs(triggADCs - mean_t) < 3 * std_t)
 			mean_t = np.extract(condition_t, triggADCs).mean()
@@ -294,7 +327,6 @@ class CCD_Caen:
 				condition_ac = (np.abs(acADCs - mean_ac) < 3 * std_ac)
 				mean_ac = np.extract(condition_ac, acADCs).mean()
 				std_ac = np.extract(condition_ac, acADCs).std()
-				# ipdb.set_trace(context=5)
 		# self.trigger.Correct_Base_Line(mean_volts=self.settings.ADC_to_Volts(mean_t, self.trigger), sigma_counts=std_t, settings=self.settings)
 		self.trigger.Correct_Base_Line2(mean_adc=mean_t, sigma_adc=std_t, settings=self.settings)
 		self.trigger.Correct_Threshold(sigma=std_t)
@@ -326,7 +358,7 @@ class CCD_Caen:
 				aco_written = self.CalculateEventsWritten(self.anti_co.ch)
 			# p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE, close_fds=True)
 			p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE, stdout=subp.PIPE, close_fds=True)
-			total_events = self.GetWaveforms(p, self.settings.num_events, sig_written, trg_written, aco_written)
+			total_events = self.GetWaveforms(p, self.settings.num_events, sig_written, trg_written, aco_written, stdin=True, stdout=True)
 		self.CloseFiles()
 		t0 = time.time() - t0
 		if not self.settings.simultaneous_conversion:
@@ -335,6 +367,7 @@ class CCD_Caen:
 		else:
 			while pconv.poll() is None:
 				continue
+			self.CloseSubprocess(pconv, stdin=False, stdout=False)
 		return total_events
 
 	def CreateRootFile(self):
@@ -390,6 +423,7 @@ if __name__ == '__main__':
 			pconv = ccd.CreateRootFile()
 			while pconv.poll() is None:
 				continue
+			ccd.CloseSubprocess(pconv, stdin=False, stdout=False)
 
 	# ccd.SetOutputFilesNames()
 	# ccd.TakeTwoWaves()

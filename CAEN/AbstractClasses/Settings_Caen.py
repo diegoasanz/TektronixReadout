@@ -34,6 +34,7 @@ class Settings_Caen:
 		self.calib_path = ''
 		self.simultaneous_conversion = False
 		self.plot_waveforms = False
+		self.random_test = False
 		self.time_res = 2e-9
 		self.do_hv_control = False
 		self.pics_folder_path = ''
@@ -105,6 +106,8 @@ class Settings_Caen:
 						self.simultaneous_conversion = bool(parser.getboolean('RUN', 'simultaneous_conversion'))
 					if parser.has_option('RUN', 'plot_waveforms'):
 						self.plot_waveforms = bool(parser.getboolean('RUN', 'plot_waveforms'))
+					if parser.has_option('RUN', 'random_test'):
+						self.random_test = bool(parser.getboolean('RUN', 'random_test'))
 
 				if parser.has_section('HV'):
 					if parser.has_option('HV', 'path_Pics_folder'):
@@ -256,7 +259,7 @@ class Settings_Caen:
 			if ch == self.trigCh:
 				rfile.write('\nPULSE_POLARITY\tNEGATIVE')
 				rfile.write('\nDC_OFFSET\t{o}'.format(o=trigger.dc_offset_percent))
-				if doBaseLines:
+				if doBaseLines or self.random_test:
 					rfile.write('\nCHANNEL_TRIGGER\tDISABLED')
 				else:
 					rfile.write('\nCHANNEL_TRIGGER\tACQUISITION_ONLY')
