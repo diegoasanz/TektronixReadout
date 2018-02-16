@@ -18,7 +18,7 @@ from AbstractClasses.Settings_Caen import Settings_Caen
 from AbstractClasses.HV_Control import HV_Control
 from AbstractClasses.Utils import Utils
 
-trig_rand_time = 0.5
+trig_rand_time = 0.01
 
 class CCD_Caen:
 	def __init__(self, infile='None', verbose=False):

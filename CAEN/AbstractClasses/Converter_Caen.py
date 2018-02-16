@@ -76,8 +76,12 @@ class Converter_Caen:
 		self.hv_voltage_event = None
 		self.hv_current_event = None
 		self.hour_event = self.minute_event = self.second_event = None
+		self.time_break = int(np.ceil(self.time_recal + 30))
+		self.file_hv = None
 		# self.hour_min_sec_event = None
 		# self.currentTime = None
+
+		self.struct_s = self.struct_t = self.struct_ac = None
 
 		self.bar = None
 
@@ -155,10 +159,9 @@ class Converter_Caen:
 			self.wait_for_data = bool(self.wait_for_data or (self.anti_co_written_events <= ev))
 
 	def WaitForData(self, ev, t1):
-		time_break = int(np.ceil(self.time_recal + 30))
 		while self.wait_for_data:
 			if self.simultaneous_conversion:
-				if time.time() - t1 > time_break:
+				if time.time() - t1 > self.time_break:
 					print 'No data has been saved in file for event {ev} in the past {t} seconds... exiting!'.format(ev=ev, t=time_break)
 					exit()
 				if not self.fs.closed:
@@ -217,23 +220,26 @@ class Converter_Caen:
 
 	def ConvertEvents(self):
 		self.bar.start()
+		# blat = time.time()
+		# while time.time() - blat < 15:
+		# 	pass
 		for ev in xrange(self.num_events):
 			t1 = time.time()
 			self.CheckFilesSizes(ev)
 			self.WaitForData(ev, t1)
 			self.ReadData(ev)
 			self.CheckData()
-			s = struct.Struct(self.struct_fmt).unpack_from(self.datas)
-			self.sigADC = np.array(s, 'H')
+			self.struct_s = struct.Struct(self.struct_fmt).unpack_from(self.datas)
+			self.sigADC = np.array(self.struct_s, 'H')
 			self.sigVolts = self.ADC_to_Volts('signal')
-			t = struct.Struct(struct_fmt).unpack_from(self.datat)
-			self.trigADC = np.array(t, 'H')
+			self.struct_t = struct.Struct(struct_fmt).unpack_from(self.datat)
+			self.trigADC = np.array(self.struct_t, 'H')
 			self.trigVolts = self.ADC_to_Volts('trigger')
 			self.LookForTime0()
 			self.timeVect = np.linspace(-self.trigPos * self.time_res, self.time_res * (self.points - 1 - self.trigPos), self.points, dtype='f8')
 			if self.doVeto:
-				ac = struct.Struct(struct_fmt).unpack_from(self.dataa)
-				self.vetoADC = np.array(ac, 'H')
+				self.struct_ac = struct.Struct(struct_fmt).unpack_from(self.dataa)
+				self.vetoADC = np.array(self.struct_ac, 'H')
 				self.vetoVolts = self.ADC_to_Volts('veto')
 				self.vetoed_event = self.IsEventVetoed()
 			self.DefineSignalBaseLineAndPeakPosition()
@@ -345,16 +351,15 @@ class Converter_Caen:
 		return result
 
 	def Read_HV_File(self):
+		line = [0, 0]
+		temp_line = ''
 		if self.simultaneous_conversion:
-			file = open(self.hv_file_name, 'r')
-			line = file.readline().split()
-		else:
-			line = [0, 0]
+			if os.path.isfile(self.hv_file_name):
+				with open(self.hv_file_name, 'r') as self.file_hv:
+					temp_line = self.file_hv.readline()
+					line = temp_line.split() if temp_line != '' else line
 		self.hv_voltage_event, self.hv_current_event = float(line[0]), float(line[1])
-		if self.simultaneous_conversion:
-			file.close()
-			del file
-
+		del line, temp_line, self.file_hv
 
 if __name__ == '__main__':
 	run_dir_location = str(sys.argv[1])  # output directory location
