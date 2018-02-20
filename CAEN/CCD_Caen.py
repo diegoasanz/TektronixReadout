@@ -18,7 +18,8 @@ from AbstractClasses.Settings_Caen import Settings_Caen
 from AbstractClasses.HV_Control import HV_Control
 from AbstractClasses.Utils import Utils
 
-trig_rand_time = 0.01
+trig_rand_time = 0.2
+wait_time_hv = 7
 
 class CCD_Caen:
 	def __init__(self, infile='None', verbose=False):
@@ -42,27 +43,41 @@ class CCD_Caen:
 		self.hv_control = None
 		self.utils = Utils(self.settings)
 		self.RemoveFiles()
+		self.t0, self.t1, self.t2 = None, None, None
+		self.p, self.pconv = None, None
+		self.total_events = None
+		self.written_events_sig = self.written_events_trig = self.written_events_aco = 0
+		self.total_events_sig = self.total_events_trig = self.total_events_aco = 0
+		self.session_measured_data_sig = self.session_measured_data_trig = self.session_measured_data_aco = 0
+		self.total_merged_data_sig = self.total_merged_data_trig = self.total_merged_data_aco = 0
+		self.doMerge = False
+		self.min_measured_data = 0
+		self.min_data_to_write = 0
+		self.events_to_write = 0
+		self.read_size = 0
+		self.sig_written, self.trg_written, self.aco_written = None, None, None
 
 	def StartHVControl(self):
-		wait_time = 7
+		wait_time_hv = 7
 		if self.settings.do_hv_control:
 			self.hv_control = HV_Control(self.settings)
-			print 'Waiting {t} seconds for the HVClient to start...'.format(t=wait_time)
-			self.settings.Delay(wait_time)
+			print 'Waiting {t} seconds for the HVClient to start...'.format(t=wait_time_hv)
+			self.settings.Delay(wait_time_hv)
 			self.hv_control.CheckVoltage()
 
 	def GetBaseLines(self):
 		self.settings.SetupDigitiser(doBaseLines=True, signal=self.signal, trigger=self.trigger, ac=self.anti_co)
-		p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD_BL.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE, close_fds=True)
+		self.p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD_BL.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE, close_fds=True)
 		t0 = time.time()
 		self.CreateEmptyFiles()
-		events_written = self.GetWaveforms(p, events=1, stdin=True, stdout=False)
+		events_written = self.GetWaveforms(self.p, events=1, stdin=True, stdout=False)
 		if events_written >= 1:
 			self.CloseFiles()
 			self.ReadBaseLines()
 			t0 = time.time() - t0
 			self.settings.RemoveBinaries()
 		print 'Time getting base lines: {t} seconds'.format(t=t0)
+		del t0
 
 	def CreateEmptyFiles(self):
 		self.ft0 = file('raw_wave{t}.dat'.format(t=self.trigger.ch), 'wb')
@@ -78,28 +93,35 @@ class CCD_Caen:
 		if self.fs0:
 			if not self.fs0.closed:
 				self.fs0.close()
+				del self.fs0
 		if self.ft0:
 			if not self.ft0.closed:
 				self.ft0.close()
+				del self.ft0
 		if self.settings.ac_enable:
 			if self.fa0:
 				if not self.fa0.closed:
 					self.fa0.close()
+					del self.fa0
 		channels = [self.signal.ch, self.trigger.ch, self.anti_co.ch] if self.settings.ac_enable else [self.signal.ch, self.trigger.ch]
 		for ch in channels:
 			if os.path.isfile('raw_waves{c}.dat'.format(c=ch)):
 				os.remove('raw_waves{c}.dat'.format(c=ch))
 			if os.path.isfile('waves{c}.dat'.format(c=ch)):
 				os.remove('waves{c}.dat'.format(c=ch))
+		del channels
 
 	def CloseFiles(self):
 		self.ft0.close()
+		del self.ft0
 		self.fs0.close()
+		del self.fs0
 		if self.settings.ac_enable:
 			self.fa0.close()
+			del self.fa0
 
 	def GetWaveforms(self, p, events=1, sig_written=0, trg_written=0, aco_written=0, stdin=False, stdout=False):
-		t1 = time.time()
+		self.t1 = time.time()
 		if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 		if events == 1:
 			# while p.poll() is None:
@@ -145,11 +167,11 @@ class CCD_Caen:
 			# self.settings.Delay(1)
 			p.stdin.write('s')
 			p.stdin.flush()
-			written_events_sig = written_events_trig = written_events_aco = 0
+			self.written_events_sig = self.written_events_trig = self.written_events_aco = 0
 			# self.settings.Delay(1)
-			t2 = time.time()
+			self.t2 = time.time()
 			while p.poll() is None:
-				if time.time() - t1 >= self.settings.time_calib:
+				if time.time() - self.t1 >= self.settings.time_calib:
 					p.stdin.write('s')
 					p.stdin.flush()
 					self.settings.RemoveBinaries()
@@ -160,7 +182,8 @@ class CCD_Caen:
 					self.settings.Delay(1)
 					if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 					self.CloseSubprocess(p=p, stdin=stdin, stdout=stdout)
-				elif written_events_sig + sig_written >= events:
+					del self.t1
+				elif self.written_events_sig + self.sig_written >= events:
 					p.stdin.write('s')
 					p.stdin.flush()
 					self.settings.RemoveBinaries()
@@ -170,28 +193,30 @@ class CCD_Caen:
 					if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 					self.CloseSubprocess(p=p, stdin=stdin, stdout=stdout)
 				else:
-					if self.settings.random_test and (time.time() - t2 > trig_rand_time):
+					if self.settings.random_test and (time.time() - self.t2 > trig_rand_time):
 						p.stdin.write('t')
 						p.stdin.flush()
-						t2 = time.time()
-					written_events_sig, written_events_trig, written_events_aco = self.ConcatenateBinaries2(written_events_sig, written_events_trig, written_events_aco, sig_written, trg_written, aco_written)
+						self.t2 = time.time()
+					self.written_events_sig, self.written_events_trig, self.written_events_aco = self.ConcatenateBinaries2(self.written_events_sig, self.written_events_trig, self.written_events_aco, sig_written, trg_written, aco_written)
 					if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 					if not self.settings.simultaneous_conversion:
-						self.settings.bar.update(int(min(written_events_sig + sig_written, self.settings.num_events)))
+						self.settings.bar.update(int(min(self.written_events_sig + sig_written, self.settings.num_events)))
 			self.settings.Delay(1)
+			del self.t2
 			if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 			# written_events_sig, written_events_trig, written_events_aco = self.ConcatenateBinaries2(written_events_sig, written_events_trig, written_events_aco, sig_written, trg_written, aco_written)
-		total_events_sig = self.CalculateEventsWritten(self.signal.ch)
-		total_events_trig = self.CalculateEventsWritten(self.trigger.ch)
+		self.total_events_sig = self.CalculateEventsWritten(self.signal.ch)
+		self.total_events_trig = self.CalculateEventsWritten(self.trigger.ch)
 		if self.settings.ac_enable:
-			total_events_aco = self.CalculateEventsWritten(self.anti_co.ch)
-		if total_events_sig == total_events_trig:
-			total_events = total_events_sig
+			self.total_events_aco = self.CalculateEventsWritten(self.anti_co.ch)
+		if self.total_events_sig == self.total_events_trig:
+			self.total_events = self.total_events_sig
 			if self.settings.ac_enable:
-				if total_events_sig != total_events:
+				if self.total_events_aco != self.total_events:
 					print 'Events written are of different sizes. Missmatch'
 					exit()
-			return total_events
+			# del self.total_events_sig, self.total_events_trig, self.total_events_aco
+			return self.total_events
 		else:
 			print 'Written events are of different sizes. Missmatch. quitting...'
 			exit()
@@ -240,43 +265,43 @@ class CCD_Caen:
 		# self.ft0.flush()
 		# if self.settings.ac_enable:
 		# 	self.fa0.flush()
-		session_measured_data_sig = session_measured_data_trig = session_measured_data_aco = 0
+		self.session_measured_data_sig = self.session_measured_data_trig = self.session_measured_data_aco = 0
 		if os.path.isfile('wave{s}.dat'.format(s=self.signal.ch)) and os.path.isfile('wave{t}.dat'.format(t=self.trigger.ch)):
-			session_measured_data_sig = int(os.path.getsize('wave{s}.dat'.format(s=self.signal.ch)))
-			session_measured_data_trig = int(os.path.getsize('wave{t}.dat'.format(t=self.trigger.ch)))
+			self.session_measured_data_sig = int(os.path.getsize('wave{s}.dat'.format(s=self.signal.ch)))
+			self.session_measured_data_trig = int(os.path.getsize('wave{t}.dat'.format(t=self.trigger.ch)))
 			if self.settings.ac_enable and os.path.isfile('wave{a}.dat'.format(a=self.anti_co.ch)):
-				session_measured_data_aco = int(os.path.getsize('wave{a}.dat'.format(a=self.anti_co.ch)))
+				self.session_measured_data_aco = int(os.path.getsize('wave{a}.dat'.format(a=self.anti_co.ch)))
 
-		total_merged_data_sig = int(self.fs0.tell())
-		total_merged_data_trig = int(self.ft0.tell())
-		doMerge = (session_measured_data_sig + previous_session_written_sig * self.settings.struct_len > total_merged_data_sig) and (session_measured_data_trig + previous_session_written_trig * self.settings.struct_len > total_merged_data_trig)
+		self.total_merged_data_sig = int(self.fs0.tell())
+		self.total_merged_data_trig = int(self.ft0.tell())
+		self.doMerge = (self.session_measured_data_sig + previous_session_written_sig * self.settings.struct_len > self.total_merged_data_sig) and (self.session_measured_data_trig + previous_session_written_trig * self.settings.struct_len > self.total_merged_data_trig)
 		if self.settings.ac_enable:
-			total_merged_data_aco = int(self.fa0.tell())
-			doMerge = doMerge and (session_measured_data_aco + previous_session_written_aco * self.settings.struct_len > total_merged_data_aco)
+			self.total_merged_data_aco = int(self.fa0.tell())
+			self.doMerge = self.doMerge and (self.session_measured_data_aco + previous_session_written_aco * self.settings.struct_len > self.total_merged_data_aco)
 
-		if doMerge:
-			min_measured_data = min(session_measured_data_sig, session_measured_data_trig)
+		if self.doMerge:
+			self.min_measured_data = min(self.session_measured_data_sig, self.session_measured_data_trig)
 			if self.settings.ac_enable:
-				min_measured_data = min(min_measured_data, session_measured_data_aco)
-			data_to_write_sig = min_measured_data - total_merged_data_sig + previous_session_written_sig * self.settings.struct_len
-			data_to_write_trg = min_measured_data - total_merged_data_trig + previous_session_written_trig * self.settings.struct_len
-			min_data_to_write = min(data_to_write_sig, data_to_write_trg)
+				self.min_measured_data = min(self.min_measured_data, self.session_measured_data_aco)
+			data_to_write_sig = self.min_measured_data - self.total_merged_data_sig + previous_session_written_sig * self.settings.struct_len
+			data_to_write_trg = self.min_measured_data - self.total_merged_data_trig + previous_session_written_trig * self.settings.struct_len
+			self.min_data_to_write = min(data_to_write_sig, data_to_write_trg)
 			if self.settings.ac_enable:
-				data_to_write_aco = min_measured_data - total_merged_data_aco + previous_session_written_aco * self.settings.struct_len
-				min_data_to_write = min(min_data_to_write, data_to_write_aco)
-			events_to_write = int(np.floor(min_data_to_write / float(self.settings.struct_len)))
-			read_size = events_to_write * self.settings.struct_len
+				data_to_write_aco = self.min_measured_data - self.total_merged_data_aco + previous_session_written_aco * self.settings.struct_len
+				self.min_data_to_write = min(self.min_data_to_write, data_to_write_aco)
+			self.events_to_write = int(np.floor(self.min_data_to_write / float(self.settings.struct_len)))
+			self.read_size = self.events_to_write * self.settings.struct_len
 
 			fins = file('wave{s}.dat'.format(s=self.signal.ch), 'rb')
 			fins.seek(session_written_events_sig * self.settings.struct_len, 0)
-			datas = fins.read(read_size)
+			datas = fins.read(self.read_size)
 			self.fs0.write(datas)
 			self.fs0.flush()
 			fins.close()
 
 			fint = file('wave{t}.dat'.format(t=self.trigger.ch), 'rb')
 			fint.seek(session_written_events_trig * self.settings.struct_len, 0)
-			datat = fint.read(read_size)
+			datat = fint.read(self.read_size)
 			self.ft0.write(datat)
 			self.ft0.flush()
 			fint.close()
@@ -284,14 +309,18 @@ class CCD_Caen:
 			if self.settings.ac_enable:
 				fina = file('wave{a}.dat'.format(a=self.anti_co.ch), 'rb')
 				fina.seek(session_written_events_aco * self.settings.struct_len, 0)
-				dataa = fina.read(read_size)
+				dataa = fina.read(self.read_size)
 				self.fa0.write(dataa)
 				self.fa0.flush()
 				fina.close()
 
-			session_written_events_sig += int(events_to_write)
-			session_written_events_trig += int(events_to_write)
-			session_written_events_aco += int(events_to_write)
+			session_written_events_sig += int(self.events_to_write)
+			session_written_events_trig += int(self.events_to_write)
+			session_written_events_aco += int(self.events_to_write)
+
+			del data_to_write_sig, data_to_write_trg, fins, datas, fint, datat
+			if self.settings.ac_enable:
+				del data_to_write_aco, fina, dataa
 
 		# self.fs0.flush()
 		# self.ft0.flush()
@@ -300,8 +329,7 @@ class CCD_Caen:
 		return session_written_events_sig, session_written_events_trig, session_written_events_aco
 
 	def CalculateEventsWritten(self, ch):
-		events_written = int(round(float(os.path.getsize('raw_wave{c}.dat'.format(c=ch))) / float(self.settings.struct_len)))
-		return events_written
+		return int(round(float(os.path.getsize('raw_wave{c}.dat'.format(c=ch))) / float(self.settings.struct_len)))
 
 	def ReadBaseLines(self):
 		ft = open('raw_wave{t}.dat'.format(t=self.trigger.ch), 'rb')
@@ -335,40 +363,46 @@ class CCD_Caen:
 			self.anti_co.Correct_Base_Line2(mean_adc=mean_ac, sigma_adc=std_ac, settings=self.settings)
 			self.anti_co.Correct_Threshold(sigma=std_ac)
 
+		del ft, data_t, t, triggADCs, mean_t, std_t
+		if self.settings.ac_enable:
+			del fac, data_ac, ac, acADCs, mean_ac, std_ac
+
 	def GetData(self):
-		t0 = time.time()
+		self.t0 = time.time()
 		self.CreateEmptyFiles()
-		total_events = 0
+		self.total_events = 0
 		print 'Getting {n} events...'.format(n=self.settings.num_events)
 		if self.settings.simultaneous_conversion:
-			pconv = self.CreateRootFile()
+			self.pconv = self.CreateRootFile()
 		else:
 			self.settings.CreateProgressBar(self.settings.num_events)
 			self.settings.bar.start()
-		while total_events < self.settings.num_events:
+		while self.total_events < self.settings.num_events:
 			print "\nCalibrating ADC's..."
 			if self.settings.ac_enable:
-				self.settings.SetupDigitiser(doBaseLines=False, signal=self.signal, trigger=self.trigger, ac=self.anti_co, events_written=total_events)
+				self.settings.SetupDigitiser(doBaseLines=False, signal=self.signal, trigger=self.trigger, ac=self.anti_co, events_written=self.total_events)
 			else:
-				self.settings.SetupDigitiser(doBaseLines=False, signal=self.signal, trigger=self.trigger, events_written=total_events)
-			sig_written = self.CalculateEventsWritten(self.signal.ch)
-			trg_written = self.CalculateEventsWritten(self.trigger.ch)
-			aco_written = 0
+				self.settings.SetupDigitiser(doBaseLines=False, signal=self.signal, trigger=self.trigger, events_written=self.total_events)
+			self.sig_written = self.CalculateEventsWritten(self.signal.ch)
+			self.trg_written = self.CalculateEventsWritten(self.trigger.ch)
+			self.aco_written = 0
 			if self.settings.ac_enable:
-				aco_written = self.CalculateEventsWritten(self.anti_co.ch)
+				self.aco_written = self.CalculateEventsWritten(self.anti_co.ch)
 			# p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE, close_fds=True)
-			p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE, stdout=subp.PIPE, close_fds=True)
-			total_events = self.GetWaveforms(p, self.settings.num_events, sig_written, trg_written, aco_written, stdin=True, stdout=True)
+			self.p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE, stdout=subp.PIPE, close_fds=True)
+			self.total_events = self.GetWaveforms(self.p, self.settings.num_events, self.sig_written, self.trg_written, self.aco_written, stdin=True, stdout=True)
 		self.CloseFiles()
-		t0 = time.time() - t0
+		del self.p
+		self.t0 = time.time() - self.t0
 		if not self.settings.simultaneous_conversion:
-			print 'Time getting {n} events: {t} seconds'.format(n=total_events, t=t0)
+			print 'Time getting {n} events: {t} seconds'.format(n=self.total_events, t=self.t0)
 			self.settings.bar.finish()
 		else:
-			while pconv.poll() is None:
+			while self.pconv.poll() is None:
 				continue
-			self.CloseSubprocess(pconv, stdin=False, stdout=False)
-		return total_events
+			self.CloseSubprocess(self.pconv, stdin=False, stdout=False)
+			del self.pconv
+		return self.total_events
 
 	def CreateRootFile(self):
 		ac_ch = self.anti_co.ch if self.settings.ac_enable else -1
@@ -388,6 +422,7 @@ class CCD_Caen:
 		                str(ac_offset), str(self.settings.time_res), str(self.settings.post_trig_percent), str(trig_th_in_volts),
 		                str(veto_value), str(self.settings.dig_bits), str(int(self.settings.simultaneous_conversion)),
 		                str(self.settings.time_calib), str(control_hv)], close_fds=True)
+		del ac_ch, ac_offset, trig_th_in_volts, veto_value, control_hv, bin_pat_sig, bin_pat_trig, bin_pat_ac
 		return p
 
 	def CloseHVClient(self):
