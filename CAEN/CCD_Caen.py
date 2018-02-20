@@ -76,6 +76,7 @@ class CCD_Caen:
 			self.ReadBaseLines()
 			t0 = time.time() - t0
 			self.settings.RemoveBinaries()
+			self.RemoveFiles()
 		print 'Time getting base lines: {t} seconds'.format(t=t0)
 		del t0
 
@@ -111,14 +112,26 @@ class CCD_Caen:
 				os.remove('waves{c}.dat'.format(c=ch))
 		del channels
 
+	def OpenFiles(self, mode='rb'):
+		if not self.fs0:
+			self.fs0 = open('raw_waves{s}.dat'.format(s=self.signal.ch), mode)
+		if not self.ft0:
+			self.ft0 = open('raw_waves{t}.dat'.format(t=self.trigger.ch), mode)
+		if self.settings.ac_enable:
+			if not self.fa0:
+				self.fa0 = open('raw_waves{a}.dat'.format(a=self.anti_co.ch), mode)
+
 	def CloseFiles(self):
 		self.ft0.close()
-		del self.ft0
+		if self.ft0.closed:
+			del self.ft0
 		self.fs0.close()
-		del self.fs0
+		if self.fs0.closed:
+			del self.fs0
 		if self.settings.ac_enable:
 			self.fa0.close()
-			del self.fa0
+			if self.fa0.closed:
+				del self.fa0
 
 	def GetWaveforms(self, p, events=1, sig_written=0, trg_written=0, aco_written=0, stdin=False, stdout=False):
 		self.t1 = time.time()
@@ -265,6 +278,7 @@ class CCD_Caen:
 		# self.ft0.flush()
 		# if self.settings.ac_enable:
 		# 	self.fa0.flush()
+		self.OpenFiles(mode='ab')
 		self.session_measured_data_sig = self.session_measured_data_trig = self.session_measured_data_aco = 0
 		if os.path.isfile('wave{s}.dat'.format(s=self.signal.ch)) and os.path.isfile('wave{t}.dat'.format(t=self.trigger.ch)):
 			self.session_measured_data_sig = int(os.path.getsize('wave{s}.dat'.format(s=self.signal.ch)))
@@ -322,6 +336,8 @@ class CCD_Caen:
 			if self.settings.ac_enable:
 				del data_to_write_aco, fina, dataa
 
+			self.CloseFiles()
+
 		# self.fs0.flush()
 		# self.ft0.flush()
 		# if self.settings.ac_enable:
@@ -370,6 +386,7 @@ class CCD_Caen:
 	def GetData(self):
 		self.t0 = time.time()
 		self.CreateEmptyFiles()
+		self.CloseFiles()
 		self.total_events = 0
 		print 'Getting {n} events...'.format(n=self.settings.num_events)
 		if self.settings.simultaneous_conversion:
