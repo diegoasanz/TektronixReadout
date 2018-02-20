@@ -162,7 +162,7 @@ class Converter_Caen:
 		while self.wait_for_data:
 			if self.simultaneous_conversion:
 				if time.time() - t1 > self.time_break:
-					print 'No data has been saved in file for event {ev} in the past {t} seconds... exiting!'.format(ev=ev, t=time_break)
+					print 'No data has been saved in file for event {ev} in the past {t} seconds... exiting!'.format(ev=ev, t=self.time_break)
 					exit()
 				if not self.fs.closed:
 					self.fs.close()
@@ -220,9 +220,9 @@ class Converter_Caen:
 
 	def ConvertEvents(self):
 		self.bar.start()
-		# blat = time.time()
-		# while time.time() - blat < 15:
-		# 	pass
+		blat = time.time()
+		while time.time() - blat < 15:
+			pass
 		for ev in xrange(self.num_events):
 			t1 = time.time()
 			self.CheckFilesSizes(ev)

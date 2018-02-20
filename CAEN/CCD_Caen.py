@@ -72,7 +72,6 @@ class CCD_Caen:
 		self.CreateEmptyFiles()
 		events_written = self.GetWaveforms(self.p, events=1, stdin=True, stdout=False)
 		if events_written >= 1:
-			self.CloseFiles()
 			self.ReadBaseLines()
 			t0 = time.time() - t0
 			self.settings.RemoveBinaries()
@@ -114,24 +113,30 @@ class CCD_Caen:
 
 	def OpenFiles(self, mode='rb'):
 		if not self.fs0:
-			self.fs0 = open('raw_waves{s}.dat'.format(s=self.signal.ch), mode)
+			self.fs0 = open('raw_wave{s}.dat'.format(s=self.signal.ch), mode)
 		if not self.ft0:
-			self.ft0 = open('raw_waves{t}.dat'.format(t=self.trigger.ch), mode)
+			self.ft0 = open('raw_wave{t}.dat'.format(t=self.trigger.ch), mode)
 		if self.settings.ac_enable:
 			if not self.fa0:
-				self.fa0 = open('raw_waves{a}.dat'.format(a=self.anti_co.ch), mode)
+				self.fa0 = open('raw_wave{a}.dat'.format(a=self.anti_co.ch), mode)
 
 	def CloseFiles(self):
-		self.ft0.close()
-		if self.ft0.closed:
-			del self.ft0
-		self.fs0.close()
-		if self.fs0.closed:
-			del self.fs0
+		if self.ft0:
+			self.ft0.close()
+			if self.ft0.closed:
+				del self.ft0
+				self.ft0 = None
+		if self.fs0:
+			self.fs0.close()
+			if self.fs0.closed:
+				del self.fs0
+				self.fs0 = None
 		if self.settings.ac_enable:
-			self.fa0.close()
-			if self.fa0.closed:
-				del self.fa0
+			if self.fa0:
+				self.fa0.close()
+				if self.fa0.closed:
+					del self.fa0
+					self.fa0 = None
 
 	def GetWaveforms(self, p, events=1, sig_written=0, trg_written=0, aco_written=0, stdin=False, stdout=False):
 		self.t1 = time.time()
@@ -472,10 +477,10 @@ if __name__ == '__main__':
 	ccd.CloseHVClient()
 	if auto:
 		if not ccd.settings.simultaneous_conversion:
-			pconv = ccd.CreateRootFile()
-			while pconv.poll() is None:
+			ccd.pconv = ccd.CreateRootFile()
+			while ccd.pconv.poll() is None:
 				continue
-			ccd.CloseSubprocess(pconv, stdin=False, stdout=False)
+			ccd.CloseSubprocess(ccd.pconv, stdin=False, stdout=False)
 
 	# ccd.SetOutputFilesNames()
 	# ccd.TakeTwoWaves()
