@@ -17,8 +17,10 @@ from AbstractClasses.Channel_Caen import Channel_Caen
 from AbstractClasses.Settings_Caen import Settings_Caen
 from AbstractClasses.HV_Control import HV_Control
 from AbstractClasses.Utils import Utils
+from memory_profiler import profile
 
-trig_rand_time = 0.2
+
+trig_rand_time = 0.1
 wait_time_hv = 7
 
 class CCD_Caen:
@@ -62,7 +64,7 @@ class CCD_Caen:
 		if self.settings.do_hv_control:
 			self.hv_control = HV_Control(self.settings)
 			print 'Waiting {t} seconds for the HVClient to start...'.format(t=wait_time_hv)
-			self.settings.Delay(wait_time_hv)
+			time.sleep(wait_time_hv)
 			self.hv_control.CheckVoltage()
 
 	def GetBaseLines(self):
@@ -72,7 +74,6 @@ class CCD_Caen:
 		self.CreateEmptyFiles()
 		events_written = self.GetWaveforms(events=1, stdin=True, stdout=False)
 		if events_written >= 1:
-			# self.CloseFiles()
 			self.ReadBaseLines()
 			t0 = time.time() - t0
 			self.settings.RemoveBinaries()
@@ -144,26 +145,26 @@ class CCD_Caen:
 		if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 		if events == 1:
 			# while self.p.poll() is None:
-			self.settings.Delay(1)
+			time.sleep(1)
 			self.p.stdin.write('c')
 			self.p.stdin.flush()
-			self.settings.Delay(1)
+			time.sleep(1)
 			self.p.stdin.write('s')
 			self.p.stdin.flush()
 			if self.settings.plot_waveforms:
-				# self.settings.Delay(1)
+				# time.sleep(1)
 				self.p.stdin.write('P')
 				self.p.stdin.flush()
-			# self.settings.Delay(1)
+			# time.sleep(1)
 			self.p.stdin.write('w')
 			self.p.stdin.flush()
-			# self.settings.Delay(1)
+			# time.sleep(1)
 			self.p.stdin.write('t')
 			self.p.stdin.flush()
-			self.settings.Delay(1)
+			time.sleep(1)
 			self.p.stdin.write('s')
 			self.p.stdin.flush()
-			self.settings.Delay(1)
+			time.sleep(1)
 			self.p.stdin.write('q')
 			self.p.stdin.flush()
 			while self.p.poll() is None:
@@ -173,21 +174,21 @@ class CCD_Caen:
 			written_events_sig, written_events_trig, written_events_aco = self.ConcatenateBinaries2(0, 0, 0, sig_written, trg_written, aco_written)
 			self.settings.RemoveBinaries()
 		else:
-			self.settings.Delay(1)
+			time.sleep(1)
 			self.p.stdin.write('c')
 			self.p.stdin.flush()
-			self.settings.Delay(1)
+			time.sleep(1)
 			self.p.stdin.write('W')
 			self.p.stdin.flush()
 			if self.settings.plot_waveforms:
-				# self.settings.Delay(1)
+				# time.sleep(1)
 				self.p.stdin.write('P')
 				self.p.stdin.flush()
-			# self.settings.Delay(1)
+			# time.sleep(1)
 			self.p.stdin.write('s')
 			self.p.stdin.flush()
 			self.written_events_sig = self.written_events_trig = self.written_events_aco = 0
-			# self.settings.Delay(1)
+			# time.sleep(1)
 			self.t2 = time.time()
 			while self.p.poll() is None:
 				if time.time() - self.t1 >= self.settings.time_calib:
@@ -198,7 +199,7 @@ class CCD_Caen:
 					self.p.stdin.flush()
 					self.p.stdin.write('q')
 					self.p.stdin.flush()
-					self.settings.Delay(1)
+					time.sleep(1)
 					if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 					self.CloseSubprocess('p', stdin=stdin, stdout=stdout)
 					del self.t1
@@ -208,7 +209,7 @@ class CCD_Caen:
 					self.settings.RemoveBinaries()
 					self.p.stdin.write('q')
 					self.p.stdin.flush()
-					self.settings.Delay(1)
+					time.sleep(1)
 					if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 					self.CloseSubprocess('p', stdin=stdin, stdout=stdout)
 				else:
@@ -220,7 +221,7 @@ class CCD_Caen:
 					if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 					if not self.settings.simultaneous_conversion:
 						self.settings.bar.update(int(min(self.written_events_sig + sig_written, self.settings.num_events)))
-			self.settings.Delay(1)
+			time.sleep(1)
 			del self.t2
 			if self.settings.do_hv_control: self.hv_control.UpdateHVFile()
 			# written_events_sig, written_events_trig, written_events_aco = self.ConcatenateBinaries2(written_events_sig, written_events_trig, written_events_aco, sig_written, trg_written, aco_written)
@@ -243,8 +244,8 @@ class CCD_Caen:
 	def CloseSubprocess(self, pname, stdin=False, stdout=False):
 		if pname == 'p':
 			p = self.p
-		if pname == 'pname':
-			p = self.pname
+		elif pname == 'pconv':
+			p = self.pconv
 		else:
 			print 'Something went really wrong!'
 
@@ -403,16 +404,16 @@ class CCD_Caen:
 		self.total_events = 0
 		print 'Getting {n} events...'.format(n=self.settings.num_events)
 		if self.settings.simultaneous_conversion:
-			self.pconv = self.CreateRootFile()
+			self.CreateRootFile()
 		else:
 			self.settings.CreateProgressBar(self.settings.num_events)
 			self.settings.bar.start()
+		print "\nCalibrating ADC's..."
+		if self.settings.ac_enable:
+			self.settings.SetupDigitiser(doBaseLines=False, signal=self.signal, trigger=self.trigger, ac=self.anti_co, events_written=self.total_events)
+		else:
+			self.settings.SetupDigitiser(doBaseLines=False, signal=self.signal, trigger=self.trigger, events_written=self.total_events)
 		while self.total_events < self.settings.num_events:
-			print "\nCalibrating ADC's..."
-			if self.settings.ac_enable:
-				self.settings.SetupDigitiser(doBaseLines=False, signal=self.signal, trigger=self.trigger, ac=self.anti_co, events_written=self.total_events)
-			else:
-				self.settings.SetupDigitiser(doBaseLines=False, signal=self.signal, trigger=self.trigger, events_written=self.total_events)
 			self.sig_written = self.CalculateEventsWritten(self.signal.ch)
 			self.trg_written = self.CalculateEventsWritten(self.trigger.ch)
 			self.aco_written = 0
@@ -445,7 +446,7 @@ class CCD_Caen:
 		bin_pat_ac = ''
 		if self.settings.ac_enable:
 			bin_pat_ac = 'raw_wave{a}.dat'.format(a=self.anti_co.ch) if self.settings.simultaneous_conversion else '{d}/Runs/{f}_veto.dat'.format(wd=os.getcwd(), d=self.settings.outdir, f=self.settings.filename)
-		self.pconf = subp.Popen(['python', 'AbstractClasses/Converter_Caen.py', self.settings.outdir, os.getcwd(), self.settings.filename,
+		self.pconv = subp.Popen(['python', 'AbstractClasses/Converter_Caen.py', self.settings.outdir, os.getcwd(), self.settings.filename,
 		                str(bin_pat_sig), str(bin_pat_trig), str(bin_pat_ac), str(self.settings.points),
 		                str(self.settings.num_events),str(self.settings.struct_len), self.settings.struct_fmt,
 		                str(self.settings.sigRes), str(self.signal.dc_offset_percent), str(self.trigger.dc_offset_percent),
@@ -453,7 +454,6 @@ class CCD_Caen:
 		                str(veto_value), str(self.settings.dig_bits), str(int(self.settings.simultaneous_conversion)),
 		                str(self.settings.time_calib), str(control_hv)], close_fds=True)
 		del ac_ch, ac_offset, trig_th_in_volts, veto_value, control_hv, bin_pat_sig, bin_pat_trig, bin_pat_ac
-
 
 	def CloseHVClient(self):
 		if self.settings.do_hv_control:
@@ -463,9 +463,8 @@ class CCD_Caen:
 		print np.double([(tf-ti)/float(self.settings.time_res) +1, ti-self.settings.time_res/2.0,
 		                      tf+self.settings.time_res/2.0, (vmax-vmin)/self.settings.sigRes, vmin, vmax])
 
-
-
-if __name__ == '__main__':
+@profile
+def main():
 	parser = OptionParser()
 	parser.add_option('-i', '--infile', dest='infile', default='', type='string',
 	                  help='Input configuration file. e.g. CAENCalibration.cfg')
@@ -495,3 +494,35 @@ if __name__ == '__main__':
 	print 'Finished :)'
 	sys.stdout.write('\a\a\a')
 	sys.stdout.flush()
+
+if __name__ == '__main__':
+	main()
+	# parser = OptionParser()
+	# parser.add_option('-i', '--infile', dest='infile', default='', type='string',
+	#                   help='Input configuration file. e.g. CAENCalibration.cfg')
+	# parser.add_option('-v', '--verbose', dest='verb', default=False, help='Toggles verbose', action='store_true')
+	# parser.add_option('-a', '--automatic', dest='auto', default=False, help='Toggles automatic conversion and analysis afterwards', action='store_true')
+	#
+	# (options, args) = parser.parse_args()
+	# infile = str(options.infile)
+	# auto = bool(options.auto)
+	# verb = bool(options.verb)
+	# ccd = CCD_Caen(infile, verb)
+	# ccd.StartHVControl()
+	# ccd.GetBaseLines()
+	# written_events = ccd.GetData()
+	# ccd.settings.num_events = written_events
+	# ccd.settings.MoveBinaryFiles()
+	# ccd.CloseHVClient()
+	# if auto:
+	# 	if not ccd.settings.simultaneous_conversion:
+	# 		ccd.CreateRootFile()
+	# 		while self.pconv.poll() is None:
+	# 			continue
+	# 		ccd.CloseSubprocess('pconv', stdin=False, stdout=False)
+	#
+	# # ccd.SetOutputFilesNames()
+	# # ccd.TakeTwoWaves()
+	# print 'Finished :)'
+	# sys.stdout.write('\a\a\a')
+	# sys.stdout.flush()

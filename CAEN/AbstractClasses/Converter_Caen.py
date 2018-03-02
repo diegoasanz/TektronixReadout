@@ -20,7 +20,7 @@ from copy import deepcopy
 
 class Converter_Caen:
 	def __init__(self, rundir, workingdir, filename, sigPath, trigPath, vetoPath, points, nevents, struct_len, struct_fmt, adc_res, sig_dcop, trig_dcop, veto_dcop, time_res, post_trig, trig_val, veto_val,
-	             dig_bits, sim_conv, time_recal, control_hv=False):
+	             dig_bits, sim_conv, time_recal, control_hv=False, polarity=1):
 		self.run_dir_location = rundir  # output directory location
 		self.working_dir_location = workingdir  # current directory location, where the raw_wave files are
 		self.filename = filename  # file name for the files
@@ -43,6 +43,7 @@ class Converter_Caen:
 		self.simultaneous_conversion = sim_conv  # whether or not to do the simultaneous conversion while taking data
 		self.time_recal = time_recal  # time between digitiser recalibrations
 		self.control_hv = control_hv
+		self.polarity = polarity
 
 		self.hv_file_name = 'hvfile.txt'
 		self.hv_dict = None
@@ -220,9 +221,9 @@ class Converter_Caen:
 
 	def ConvertEvents(self):
 		self.bar.start()
-		blat = time.time()
-		while time.time() - blat < 15:
-			pass
+		# blat = time.time()
+		# while time.time() - blat < 15:
+		# 	pass
 		for ev in xrange(self.num_events):
 			t1 = time.time()
 			self.CheckFilesSizes(ev)
@@ -314,15 +315,15 @@ class Converter_Caen:
 		sigma = np.extract(self.condition_base_line, self.sigADC).std()
 		lim_inf = self.condition_peak_pos.argmax()
 		lim_sup = self.points - self.condition_peak_pos[::-1].argmax() - 1
-		peak_pos = self.sigADC.argmin()
+		peak_pos = self.sigADC.argmin() if self.polarity == 1 else self.sigADC.argmax()
 		if lim_inf < peak_pos < lim_sup:
 			# The event has a good shape
 			return 0
 		else:
-			modified_adc = self.sigADC - sigma
-			modified_adc[lim_inf] += 2*sigma
-			modified_adc[lim_sup] += 2*sigma
-			peak_pos = modified_adc.argmin()
+			modified_adc = self.sigADC - sigma if self.polarity == 1 else self.sigADC + sigma
+			modified_adc[lim_inf] += 2*sigma if self.polarity == 1 else -2*sigma
+			modified_adc[lim_sup] += 2*sigma if self.polarity == 1 else -2*sigma
+			peak_pos = modified_adc.argmin() if self.polarity == 1 else modified_adc.argmax()
 			if lim_inf < peak_pos < lim_sup:
 				# Can't tell if the event has a bad shape
 				return -1

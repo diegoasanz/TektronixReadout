@@ -15,6 +15,7 @@ import ROOT as ro
 import shutil
 from copy import deepcopy
 import glob
+from Utils import *
 
 
 # from DataAcquisition import DataAcquisition
@@ -28,7 +29,7 @@ class HV_Control:
 		self.doControlHV = False if self.hv_supply == '' else True
 		self.logs_dir = '{f}/{d}_CH{ch}'.format(f=self.filename, d=self.hv_supply, ch=self.ch)
 		self.log_file = None
-		self.last_line = None
+		self.last_line = {'time': time.strftime("%H:%M:%S", time.gmtime(666)), 'voltage': 0, 'current': 0}
 		self.ramp = settings.hv_ramp
 		self.supply_number = None
 		self.time_update = 2.0
@@ -46,7 +47,7 @@ class HV_Control:
 				self.process = subp.Popen(['HVClient.py', '-H'], bufsize=-1, stdin=subp.PIPE, stdout=subp.PIPE, close_fds=True)
 				self.time0 = time.time()
 				# self.process = subp.Popen(['HVClient.py', '-H'], bufsize=-1, stdin=subp.PIPE, close_fds=True)
-				settings.Delay(3)
+				time.sleep(3)
 				self.process.stdin.write('yes\n')
 				self.process.stdin.flush()
 			else:
@@ -114,12 +115,12 @@ class HV_Control:
 		for ch in xrange(iseg_chs):
 			conf_file.write('\n[CH{ch}]\n'.format(ch=ch))
 			conf_file.write('name: CH{ch}\n'.format(ch=ch))
-			compliance = self.current_limit if ch == self.ch else 10e-6
+			compliance = self.current_limit if ch == self.ch else 250e-9
 			conf_file.write('compliance: {c}\n'.format(c=compliance))
 			conf_file.write('measure_range: 10e-6\n')
 			conf_file.write('bias: 0\n')
-			min_bias = -1 if self.bias >= 0 else self.bias - 10
-			max_bias = self.bias + 10 if self.bias >= 0 else 1
+			min_bias = -1 if self.bias >= 0 else min(self.bias * 2, -1110)
+			max_bias = max(self.bias * 2, 1110) if self.bias >= 0 else 1
 			if ch == self.ch:
 				conf_file.write('min_bias: {m}\n'.format(m=min_bias))
 				conf_file.write('max_bias: {m}\n'.format(m=max_bias))
@@ -152,20 +153,27 @@ class HV_Control:
 	def GetLastLogFilePath(self):
 		list_logs = glob.glob('{d}/*.log'.format(d=self.logs_dir))
 		self.log_file = max(list_logs, key=os.path.getctime)
+		del list_logs
 
 	def ReadLastLine(self):
 		self.GetLastLogFilePath()
 		current_log = open('{f}'.format(d=self.logs_dir, f=self.log_file), 'r')
 		lines = current_log.readlines()
 		current_log.close()
-		temp_line = lines[-1].split()
-		self.last_line = {'time': temp_line[0], 'voltage': float(temp_line[1]), 'current': float(temp_line[2])}
+		if not lines:
+			return
+		if len(lines) >= 1:
+			temp_line = lines[-1].split()
+			if len(temp_line) >= 3:
+				if IsFloat(temp_line[1]) and IsFloat(temp_line[2]):
+					self.last_line = {'time': temp_line[0], 'voltage': float(temp_line[1]), 'current': float(temp_line[2])}
+		return
 
 	def CorrectBias(self, delta_volts):
 		self.process.stdin.write('BIAS HV{s} CH{c} {v}\n'.format(s=self.supply_number, c=self.ch, v=self.bias))
 		self.process.stdin.flush()
 		wait_time = delta_volts/float(self.ramp) + 5
-		self.settings.Delay(wait_time)
+		time.sleep(wait_time)
 
 	def UpdateHVFile(self):
 		if time.time() - self.time0 >= self.time_update:
@@ -174,15 +182,16 @@ class HV_Control:
 			self.WriteHVFile()
 
 	def WriteHVFile(self):
-		self.out_file = open(self.out_file_name, 'w')
-		self.out_file.write('{v} {c}'.format(v=self.last_line['voltage'], c=self.last_line['current']))
-		self.out_file.close()
+		with open(self.out_file_name, 'w') as self.out_file:
+			self.out_file.write('{v} {c}'.format(v=self.last_line['voltage'], c=self.last_line['current']))
+		del self.out_file
+		self.out_file = None
 
 	def CloseClient(self):
 		if self.process:
 			self.process.stdin.write('exit\n')
 			self.process.stdin.flush()
-			self.settings.Delay(1)
+			time.sleep(1)
 			self.MoveLogFolder()
 			os.remove(self.out_file_name)
 

@@ -194,11 +194,11 @@ class Settings_Caen:
 		self.filename = '{d}_{p}_ccd'.format(p=self.prefix, d=self.dut)
 		self.filename = AddSuffix(self.filename)
 
-	def Delay(self, ti=1.0):
-		t0 = time.time()
-		while time.time() - t0 < ti:
-			continue
-		return
+	# def Delay(self, ti=1.0):
+	# 	t0 = time.time()
+	# 	while time.time() - t0 < ti:
+	# 		continue
+	# 	return
 
 	def SetupDigitiser(self, doBaseLines=False, signal=None, trigger=None, ac=None, events_written=0):
 		print 'Creating digitiser CAEN V1730D configuration file... ', ; sys.stdout.flush()
