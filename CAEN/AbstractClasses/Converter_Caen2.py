@@ -12,6 +12,7 @@ from ConfigParser import ConfigParser
 import subprocess as subp
 import struct
 import ROOT as ro
+import pickle
 import shutil
 from copy import deepcopy
 
@@ -19,8 +20,8 @@ from copy import deepcopy
 # from DataAcquisition import DataAcquisition
 
 class Converter_Caen:
-	def __init__(self, rundir, workingdir, filename, sigPath, trigPath, vetoPath, points, nevents, struct_len, struct_fmt, adc_res, sig_dcop, trig_dcop, veto_dcop, time_res, post_trig, trig_val, veto_val,
-	             dig_bits, sim_conv, time_recal, control_hv=False, polarity=1):
+	def __init__(self, workingdir='.', settings_object='', signal_object='', trigger_object='', veto_object='', signal_binaries='', trigger_binaries='', veto_binaries=''):
+		self.settings_object =
 		self.run_dir_location = rundir  # output directory location
 		self.working_dir_location = workingdir  # current directory location, where the raw_wave files are
 		self.filename = filename  # file name for the files
@@ -363,40 +364,51 @@ class Converter_Caen:
 		del line, temp_line, self.file_hv
 
 if __name__ == '__main__':
-	run_dir_location = str(sys.argv[1])  # output directory location
-	working_dir_location = str(sys.argv[2])  # current directory location, where the raw_wave files are
-	filename = str(sys.argv[3])  # file name for the files
-	signal_path = str(sys.argv[4])  # caen channel for the ccd signal
-	trigger_path = str(sys.argv[5])  # caen channel for the trigger signal
-	anti_co_path = str(sys.argv[6])  # caen channel for the veto scintillator signal if no anti coincidence then this should be ''
-	points = int(sys.argv[7])  # caen number of points in each event i.e. time window devided by time resolution
-	num_events = int(sys.argv[8])  # number of events to convert
-	struct_len = int(sys.argv[9])  # structure length (obtained from struct_fmt and struct.calcsize(self.struct_fmt). e.g. 5120
-	struct_fmt = str(sys.argv[10])  # structure format of the data per event i.e. '@{p}H'.format(p=self.points). e.g. '@2560H'
-	adc_res = np.double(sys.argv[11])  # adc resolution of the digitizer
-	sig_offset = float(sys.argv[12])  # percentage offset for ccd signal (value within [-50, 50]) look at wavedump config file
-	trig_offset = float(sys.argv[13])  # percentage offset for trigger signal (value within [-50, 50]) look at wavedump config file
-	anti_co_offset = float(sys.argv[14])  # percentage offset for veto signal (value within [-50, 50]) look at wavedump config file
-	time_res = np.double(sys.argv[15])  # time resolution of digitizer. i.e. 2e-9
-	post_trig_percent = float(sys.argv[16])  # percentage of the acquired data after trigger (look at wave dump config file)
-	trig_value = np.double(sys.argv[17])  # volts below base line for trigger
-	veto_value = int(sys.argv[18])  # counts below base line on the veto signal for vetoing
-	dig_bits = int(sys.argv[19])  # number of bits of the ADC i.e. 14
-	simultaneous_conversion = bool(sys.argv[20] != '0')  # whether or not to do the simultaneous conversion while taking data
-	time_recal = float(sys.argv[21])  # time between digitiser recalibrations
-	control_hv = bool(sys.argv[22] != '0')  # whether or not voltage and currents are controlled
-	polarity = int(sys.argv[23])  # polarity of the bias voltage
+	working_dir = str(sys.argv[1])  # current directory location
+	settings_object = str(sys.argv[2])  # settings pickle path
+	signal_object = str(sys.argv[3])  # signal pickle path
+	trigger_object = str(sys.argv[4])  # trigger pickle path
+	veto_object = str(sys.argv[5])  # veto pickle path
+	signal_binaries = str(sys.argv[6])  # signal binaries path
+	trigger_binaries = str(sys.argv[7])  # trigger binaries path
+	veto_binaries = str(sys.argv[8])  # veto binaries path
 
-	converter = Converter_Caen(run_dir_location, working_dir_location, filename, signal_path, trigger_path, anti_co_path, points,
-	                           num_events, struct_len, struct_fmt, adc_res, sig_offset, trig_offset, anti_co_offset,
-	                           time_res, post_trig_percent, trig_value, veto_value, dig_bits, simultaneous_conversion, time_recal, control_hv, polarity)
-
-	converter.SetupRootFile(sys.argv)
-	converter.GetBinariesNumberWrittenEvents()
-	converter.OpenRawBinaries()
-	converter.CreateProgressBar(converter.num_events)
-	converter.ConvertEvents()
-	converter.CloseAll()
+	converter = Converter_Caen(workingdir=working_dir, settings_object=settings_object, signal_object=signal_object, trigger_object=trigger_object, veto_object=veto_object,
+	                           signal_binaries=signal_binaries, trigger_binaries=trigger_binaries, veto_binaries=veto_binaries)
+	# run_dir_location = str(sys.argv[1])  # output directory location
+	# working_dir_location = str(sys.argv[2])  # current directory location, where the raw_wave files are
+	# filename = str(sys.argv[3])  # file name for the files
+	# signal_path = str(sys.argv[4])  # caen channel for the ccd signal
+	# trigger_path = str(sys.argv[5])  # caen channel for the trigger signal
+	# anti_co_path = str(sys.argv[6])  # caen channel for the veto scintillator signal if no anti coincidence then this should be ''
+	# points = int(sys.argv[7])  # caen number of points in each event i.e. time window devided by time resolution
+	# num_events = int(sys.argv[8])  # number of events to convert
+	# struct_len = int(sys.argv[9])  # structure length (obtained from struct_fmt and struct.calcsize(self.struct_fmt). e.g. 5120
+	# struct_fmt = str(sys.argv[10])  # structure format of the data per event i.e. '@{p}H'.format(p=self.points). e.g. '@2560H'
+	# adc_res = np.double(sys.argv[11])  # adc resolution of the digitizer
+	# sig_offset = float(sys.argv[12])  # percentage offset for ccd signal (value within [-50, 50]) look at wavedump config file
+	# trig_offset = float(sys.argv[13])  # percentage offset for trigger signal (value within [-50, 50]) look at wavedump config file
+	# anti_co_offset = float(sys.argv[14])  # percentage offset for veto signal (value within [-50, 50]) look at wavedump config file
+	# time_res = np.double(sys.argv[15])  # time resolution of digitizer. i.e. 2e-9
+	# post_trig_percent = float(sys.argv[16])  # percentage of the acquired data after trigger (look at wave dump config file)
+	# trig_value = np.double(sys.argv[17])  # volts below base line for trigger
+	# veto_value = int(sys.argv[18])  # counts below base line on the veto signal for vetoing
+	# dig_bits = int(sys.argv[19])  # number of bits of the ADC i.e. 14
+	# simultaneous_conversion = bool(sys.argv[20] != '0')  # whether or not to do the simultaneous conversion while taking data
+	# time_recal = float(sys.argv[21])  # time between digitiser recalibrations
+	# control_hv = bool(sys.argv[22] != '0')  # whether or not voltage and currents are controlled
+	# polarity = int(sys.argv[23])  # polarity of the bias voltage
+	#
+	# converter = Converter_Caen(run_dir_location, working_dir_location, filename, signal_path, trigger_path, anti_co_path, points,
+	#                            num_events, struct_len, struct_fmt, adc_res, sig_offset, trig_offset, anti_co_offset,
+	#                            time_res, post_trig_percent, trig_value, veto_value, dig_bits, simultaneous_conversion, time_recal, control_hv, polarity)
+	#
+	# converter.SetupRootFile(sys.argv)
+	# converter.GetBinariesNumberWrittenEvents()
+	# converter.OpenRawBinaries()
+	# converter.CreateProgressBar(converter.num_events)
+	# converter.ConvertEvents()
+	# converter.CloseAll()
 
 
 

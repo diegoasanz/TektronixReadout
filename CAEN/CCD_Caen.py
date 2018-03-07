@@ -476,6 +476,25 @@ class CCD_Caen:
 			self.CloseSubprocess('pconv', stdin=False, stdout=False)
 		return self.total_events
 
+	def CreateRootFile2(self):
+		ac_ch = self.anti_co.ch if self.settings.ac_enable else -1
+		ac_offset = self.anti_co.dc_offset_percent if self.settings.ac_enable else -1
+		trig_th_in_volts = self.settings.ADC_to_Volts(self.settings.GetTriggerValueADCs(self.trigger), self.trigger)
+		veto_value = self.anti_co.thr_counts if self.settings.ac_enable else 0
+		control_hv = 1 if self.settings.do_hv_control and self.settings.simultaneous_conversion else 0
+		settings_bin_path = self.settings.outdir + '/Runs/{f}.settings'.format(f=self.settings.filename)
+		signal_bin_path = self.settings.outdir + '/Runs/{f}.signal'.format(f=self.settings.filename)
+		trigger_bin_path = self.settings.outdir + '/Runs/{f}.trigger'.format(f=self.settings.filename)
+		veto_bin_path = self.settings.outdir + '/Runs/{f}.veto'.format(f=self.settings.filename) if self.settings.ac_enable else ''
+		bin_pat_sig = 'raw_wave{s}.dat'.format(s=self.signal.ch) if self.settings.simultaneous_conversion else '{d}/Runs/{f}_signal.dat'.format(wd=os.getcwd(), d=self.settings.outdir, f=self.settings.filename)
+		bin_pat_trig = 'raw_wave{t}.dat'.format(t=self.trigger.ch) if self.settings.simultaneous_conversion else '{d}/Runs/{f}_trigger.dat'.format(wd=os.getcwd(), d=self.settings.outdir, f=self.settings.filename)
+		bin_pat_ac = ''
+		polarity = 1 if self.settings.bias >= 0 else -1
+		if self.settings.ac_enable:
+			bin_pat_ac = 'raw_wave{a}.dat'.format(a=self.anti_co.ch) if self.settings.simultaneous_conversion else '{d}/Runs/{f}_veto.dat'.format(wd=os.getcwd(), d=self.settings.outdir, f=self.settings.filename)
+		self.pconv = subp.Popen(['python', 'AbstractClasses/Converter_Caen2.py', os.getcwd(), settings_bin_path, signal_bin_path, trigger_bin_path, veto_bin_path, bin_pat_sig, bin_pat_trig, bin_pat_ac], close_fds=True)
+		del ac_ch, ac_offset, trig_th_in_volts, veto_value, control_hv, bin_pat_sig, bin_pat_trig, bin_pat_ac
+
 	def CreateRootFile(self):
 		ac_ch = self.anti_co.ch if self.settings.ac_enable else -1
 		ac_offset = self.anti_co.dc_offset_percent if self.settings.ac_enable else -1
@@ -497,40 +516,19 @@ class CCD_Caen:
 		                str(self.settings.time_calib), str(control_hv), str(polarity)], close_fds=True)
 		del ac_ch, ac_offset, trig_th_in_volts, veto_value, control_hv, bin_pat_sig, bin_pat_trig, bin_pat_ac
 
-	# def CreateRootFile(self):
-	# 	ac_ch = self.anti_co.ch if self.settings.ac_enable else -1
-	# 	ac_offset = self.anti_co.dc_offset_percent if self.settings.ac_enable else -1
-	# 	trig_th_in_volts = self.settings.ADC_to_Volts(self.settings.GetTriggerValueADCs(self.trigger), self.trigger)
-	# 	veto_value = self.anti_co.thr_counts if self.settings.ac_enable else 0
-	# 	control_hv = 1 if self.settings.do_hv_control and self.settings.simultaneous_conversion else 0
-	# 	bin_pat_sig = 'raw_wave{s}.dat'.format(s=self.signal.ch) if self.settings.simultaneous_conversion else '{d}/Runs/{f}_signal.dat'.format(wd=os.getcwd(), d=self.settings.outdir, f=self.settings.filename)
-	# 	bin_pat_trig = 'raw_wave{t}.dat'.format(t=self.trigger.ch) if self.settings.simultaneous_conversion else '{d}/Runs/{f}_trigger.dat'.format(wd=os.getcwd(), d=self.settings.outdir, f=self.settings.filename)
-	# 	bin_pat_ac = ''
-	# 	polarity = 1 if self.settings.bias >= 0 else -1
-	# 	if self.settings.ac_enable:
-	# 		bin_pat_ac = 'raw_wave{a}.dat'.format(a=self.anti_co.ch) if self.settings.simultaneous_conversion else '{d}/Runs/{f}_veto.dat'.format(wd=os.getcwd(), d=self.settings.outdir, f=self.settings.filename)
-	# 	self.pconv = subp.Popen(['python', 'AbstractClasses/Converter_Caen.py', self.settings.outdir, os.getcwd(), self.settings.filename,
-	# 	                str(bin_pat_sig), str(bin_pat_trig), str(bin_pat_ac), str(self.settings.points),
-	# 	                str(self.settings.num_events),str(self.settings.struct_len), self.settings.struct_fmt,
-	# 	                str(self.settings.sigRes), str(self.signal.dc_offset_percent), str(self.trigger.dc_offset_percent),
-	# 	                str(ac_offset), str(self.settings.time_res), str(self.settings.post_trig_percent), str(trig_th_in_volts),
-	# 	                str(veto_value), str(self.settings.dig_bits), str(int(self.settings.simultaneous_conversion)),
-	# 	                str(self.settings.time_calib), str(control_hv), str(polarity)], close_fds=True)
-	# 	del ac_ch, ac_offset, trig_th_in_volts, veto_value, control_hv, bin_pat_sig, bin_pat_trig, bin_pat_ac
-
 	def CloseHVClient(self):
 		if self.settings.do_hv_control:
 			self.hv_control.CloseClient()
 
 	def SavePickles(self):
-		with open('{d}/Runs/{f}.settings', 'wb') as fs:
+		with open('{d}/Runs/{f}.settings'.format(d=self.settings.outdir, f=self.settings.filename), 'wb') as fs:
 			pickle.dump(self.settings, fs, pickle.HIGHEST_PROTOCOL)
-		with open('{d}/Runs/{f}.signal', 'wb') as fsig:
+		with open('{d}/Runs/{f}.signal'.format(d=self.settings.outdir, f=self.settings.filename), 'wb') as fsig:
 			pickle.dump(self.signal, fsig, pickle.HIGHEST_PROTOCOL)
-		with open('{d}/Runs/{f}.trigger', 'wb') as ft:
+		with open('{d}/Runs/{f}.trigger'.format(d=self.settings.outdir, f=self.settings.filename), 'wb') as ft:
 			pickle.dump(self.trigger, ft, pickle.HIGHEST_PROTOCOL)
 		if self.settings.ac_enable:
-			with open('{d}/Runs/{f}.veto', 'wb') as fv:
+			with open('{d}/Runs/{f}.veto'.format(d=self.settings.outdir, f=self.settings.filename), 'wb') as fv:
 				pickle.dump(self.anti_co, fv, pickle.HIGHEST_PROTOCOL)
 
 	def PrintPlotLimits(self, ti=-5.12e-7, tf=4.606e-6, vmin=-0.7, vmax=0.05):
@@ -549,15 +547,16 @@ def main():
 	auto = bool(options.auto)
 	verb = bool(options.verb)
 	ccd = CCD_Caen(infile, verb)
-	ccd.StartHVControl()
-	ccd.GetBaseLines()
-	written_events = ccd.GetData()
-	ccd.settings.num_events = written_events
-	ccd.settings.MoveBinaryFiles()
-	ccd.SavePickles()
-	ccd.settings.RenameDigitiserSettings()
-	ccd.CloseHVClient()
 	if auto:
+		ccd.StartHVControl()
+		ccd.GetBaseLines()
+		ccd.SavePickles()
+		written_events = ccd.GetData()
+		ccd.settings.num_events = written_events
+		ccd.SavePickles()
+		ccd.settings.MoveBinaryFiles()
+		ccd.settings.RenameDigitiserSettings()
+		ccd.CloseHVClient()
 		if not ccd.settings.simultaneous_conversion:
 			ccd.CreateRootFile()
 			while ccd.pconv.poll() is None:

@@ -290,7 +290,7 @@ class Settings_Caen:
 
 	def RenameDigitiserSettings(self):
 		print 'Moving digitiser settings... ', ; sys.stdout.flush()
-		shutil.move('{d}/WaveDumpConfig_CCD.txt', '{d}/WDConfig_CCD_{f}.txt'.format(d=self.outdir, f=self.filename))
+		shutil.move('{d}/WaveDumpConfig_CCD.txt'.format(d=self.outdir), '{d}/WDConfig_CCD_{f}.txt'.format(d=self.outdir, f=self.filename))
 		print 'Done'
 
 	def RemoveBinaries(self):
