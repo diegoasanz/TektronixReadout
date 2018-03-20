@@ -58,12 +58,24 @@ def FindRedundantEvents(settings):
 					print '', ev0, '\t', ev1
 		f0.close()
 
+def IsInt(i):
+	try:
+		int(i)
+		return True
+	except ValueError:
+		return False
+
 def IsFloat(f):
 	try:
 		float(f)
 		return True
 	except ValueError:
 		return False
+
+def PlotHisto2DLimits(xmin=-0.48e-6, xmax=4.68e-6, ymin=-0.5, ymax=0.1, xres=2e-9, yres=2.15/(2.0**14-1)):
+	xbins = int(round((xmax - xmin)/xres))
+	ybins = int(round((ymax - ymin)/yres))
+	print '({nx},{minx},{maxx},{ny},{miny},{maxy})'.format(nx=xbins, minx=xmin, maxx=xmax, ny=ybins, miny=ymin,maxy=ymax)
 
 if __name__ == '__main__':
 	print 'blaaaa'

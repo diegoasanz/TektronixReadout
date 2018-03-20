@@ -13,61 +13,153 @@ import subprocess as subp
 import struct
 import ROOT as ro
 import shutil
+from Utils import *
+from collections import OrderedDict
 # from DataAcquisition import DataAcquisition
 
 
-class CCD_Caen:
-	def __init__(self, infile='None', outdir='None', filename='cal', sig=-1, trig=-1, meas=100, calv=False, atten=0.0, bias=0.05024, verb=False):
-		self.infile = infile
-		self.bias = np.double(bias * 10.0 ** (-self.atten/20.0))
-		self.in_range = 2.15
-		self.sigRes = np.double(np.divide(np.double(self.in_range), (np.power(2.0, 14.0, dtype='f8') - 1)))
-		self.sigCh = 0
-		self.trigCh = 1
-		self.acCh = -1  # anti coincidence is not enabled unless the channel is specified in the config input file
-		self.trigVal = 1
-		self.verb = verb
-		self.points = 2560
-		self.thr_trigg = 35
-		self.time_res = 2e-9
-		self.post_trig_percent = 0.9
-		self.num_events = 10
+class CCD_Analysis:
+	def __init__(self, infile='', outdir='', bias=0, hasCal=True, verbose=False):
+		self.outDir, self.inputFile, self.bias, self.hasCal, self.verb = outdir, infile, bias, hasCal, verbose
+		self.treeName = self.inputFile.split('.')[0]
+		self.fileRaw, self.treeRaw = None, None
+		self.ptsWave, self.event, self.events = 0, np.zeros(1, 'I'), 0
+		self.eventVect = np.empty(0, 'f8')
+		self.timeVect, self.signalWaveVect, self.triggerWaveVect, self.vetoWaveVect = np.empty(0, 'f8'), np.empty(0, 'f8'), np.empty(0, 'f8'), np.empty(0, 'f8')
 
+		self.ped, self.pedSigma, self.sigAndPed, self.sigAndPedSigma = np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8'), np.zeros(1, 'f8')
+		self.vetoedEvent, self.badShape, self.badPedestal = np.empty(0, '?'), np.empty(0, np.dtype('int8')), np.empty(0, '?')
+		self.voltageHV, self.currentHV = np.empty(0, 'f8'), np.empty(0, 'f8')
+		self.timeHV = np.empty(0, 'f8')
 
-		self.wfmo, self.nrpt, self.xincr, self.xunit, self.xzero, self.ymult, self.yoffs,self.yunit, self.yzero = None, None, None, None, None, None, None, None, None
-		# self.SetOutputFormatTwo()
-		self.bindata1 = None
-		self.bindata2 = None
-		self.volts1, self.time1 = np.zeros(self.points, 'f8'), np.zeros(self.points, 'f8')
-		self.volts2, self.time2 = np.zeros(self.points, 'f8'), np.zeros(self.points, 'f8')
-		self.outString1 = ''
-		self.outString2 = ''
-		self.fileWaves = None
-		self.fileWavesWriter = None
-		self.iteration = 0
-		# self.daq = DataAcquisition(self, self.verb)
-		self.peak_values_waves = np.empty(0, 'f8')
-		self.peak_values_measu = np.empty(0, 'f8')
+		self.signalWaveMeanVect, self.signalWaveSigmaVect = None, None
 
-		self.optlink = self.node = self.vme_b_addr = 0
-		self.prefix, self.suffix = 'waves', ''
-		self.wd_path = '/usr/local/bin/wavedump'
+		self.pedestalIntegrationTime = 0.4e-6
+		self.pedestalTEndPos = -20e-9
+		self.peakTime = 2.126e-6 if self.bias >= 0 else 2.120e-6
+		self.peakForward = self.pedestalIntegrationTime/2.0
+		self.peakBackward = self.pedestalIntegrationTime/2.0
 
-		self.ReadInputFile()
-		self.struct_fmt = '@{p}H'.format(p=self.points)  # binary files with no header. Each event has self.points samples 2 bytes each (unsigned short)
-		self.struct_len = struct.calcsize(self.struct_fmt)
-		self.trig, self.signal = np.zeros(1, 'f8'), np.zeros(1, 'f8')
-		self.timev = np.zeros(1, 'f8')
-		if not self.calv:
-			self.sig_offset = -45 if self.bias >= 0 else 45
+		self.branches1D = ['event', 'vetoedEvent', 'badShape', 'badPedestal', 'voltageHV', 'currentHV', 'timeHV']
+		self.branches1DType = {'event': 'uint32', 'vetoedEvent': 'bool', 'badShape': 'int8', 'badPedestal': 'bool', 'voltageHV': 'float32', 'currentHV': 'float32', 'timeHV': 'float64'}
+		self.branchesWaves = ['time', 'voltageSignal', 'voltageTrigger', 'voltageVeto']
+		self.branchesWavesType = {'time': 'float64', 'voltageSignal': 'float64', 'voltageTrigger': 'float64', 'voltageVeto': 'float64'}
+		self.branchesAll = self.branches1D + self.branchesWaves
+
+		self.dicBraVect1D = OrderedDict()
+		self.dicBraVectWaves = OrderedDict()
+
+		self.hasBranch = {}
+
+	def OpenROOTFile(self, mode='READ'):
+		if not os.path.isdir(self.outDir):
+			print 'Directory:', self.outDir, '; does not exist. Exiting!'
+			exit()
+		if not os.path.isfile('{o}/{f}'.format(o=self.outDir, f=self.fileRaw)):
+			print 'File:', self.fileRaw, '; does not exist in:', self.outDir, '. Exiting!'
+			exit()
+		if self.fileRaw:
+			if self.fileRaw.IsOpen():
+				if self.fileRaw.GetOption().lower() != mode.lower():
+					if self.fileRaw.ReOpen(mode) == -1:
+						print 'Could not reopen file:', self.fileRaw, 'in mode:', mode, '. Exiting!'
+						exit()
+				return
+			else:
+				self.fileRaw = None
+		self.fileRaw = ro.TFile('{o}/{f}'.format(o=self.outDir, f=self.fileRaw), mode)
+
+	def LoadTree(self):
+		if not self.fileRaw.IsOpen():
+			print 'First OpenROOTFile before Loading Tree'
+			return
+		self.treeRaw = self.fileRaw.Get(self.treeName)
+		self.hasBranch = {branch: self.TreeHasBranch(branch) for branch in self.branchesAll}
+		self.UpdateBranchesLists()
+		self.IsTimeHVTimeStamp()
+
+	def UpdateBranchesLists(self):
+		for branch in self.branches1D[:]:
+			if not self.hasBranch[branch]:
+				self.branches1D.remove(branch)
+		for branch in self.branchesWaves[:]:
+			if not self.hasBranch[branch]:
+				self.branchesWaves.remove(branch)
+
+	def IsTimeHVTimeStamp(self):
+		if self.hasBranch['timeHV']:
+			if self.treeRaw.GetLeaf('timeHV').GetTypeName() != 'TDatime':
+				self.branches1D = ['timeHV.AsDouble()' if branch == 'timeHV' else branch for branch in self.branches1D]
+				self.branches1DType = {'event': 'uint32', 'vetoedEvent': 'bool', 'badShape': 'int8', 'badPedestal': 'bool', 'voltageHV': 'float32', 'currentHV': 'float32', 'timeHV.AsDouble()': 'float64'}
+			else:
+				self.branches1D = ['timeHV.Convert()' if branch == 'timeHV' else branch for branch in self.branches1D]
+				self.branches1DType = {'event': 'uint32', 'vetoedEvent': 'bool', 'badShape': 'int8', 'badPedestal': 'bool', 'voltageHV': 'float32', 'currentHV': 'float32', 'timeHV.Convert()': 'uint32'}
+
+	def TreeHasBranch(self, branch):
+		if self.treeRaw.GetLeaf(branch):
+			return True
 		else:
-			self.sig_offset = -38 if self.bias < 0 else 38
-		self.trig_offset = 45
+			return False
 
-		self.rawFile, self.treeRaw = None, None
-		midd = 'in' if self.calv else 'out'
-		self.rawName = 'raw_{mi}_tree_cal_neg_{b}mV_waves'.format(mi=midd, b=abs(self.bias * 1000)) if self.bias < 0 else 'raw_{mi}_tree_cal_pos_{b}mV_waves'.format(mi=midd, b=(self.bias * 1000))
-		self.bar = None
+	def LoadVectorsFromTree(self):
+		self.ptsWave = self.treeRaw.GetLeaf('time').GetLen()
+		self.events = self.treeRaw.GetEntries()
+
+		leng = self.treeRaw.Draw(':'.join(self.branches1D), '', 'goff para', self.events, 0)
+		if leng == -1:
+			print 'Error, could not load the branches: {b}. Try again :('.format(b=':'.join(self.branches1D))
+			return
+		while leng >= self.treeRaw.GetEstimate():
+			self.treeRaw.SetEstimate(leng)
+			leng = self.treeRaw.Draw(':'.join(self.branches1D), '', 'goff para', self.events, 0)
+		self.events = leng
+		for pos, branch in enumerate(self.branches1D):
+			if self.verb: print 'Vectorising branch:', branch, '...', ; sys.stdout.flush()
+			temp = self.treeRaw.GetVal(pos)
+			self.dicBraVect1D[branch] = np.array([temp[ev] for ev in xrange(self.events)], dtype=np.dtype(self.branches1DType[branch]))
+			if self.verb: print 'Done'
+
+		leng = self.treeRaw.Draw(':'.join(self.branchesWaves), '', 'goff para', self.events, 0)
+		if leng == -1:
+			print 'Error, could not load the branches {b}. Try again :('.format(b=':'.join(self.branchesWaves))
+			return
+		while leng >= self.treeRaw.GetEstimate():
+			self.treeRaw.SetEstimate(leng)
+			leng = self.treeRaw.Draw(':'.join(self.branchesWaves), '', 'goff para', self.events, 0)
+		for pos, branch in enumerate(self.branchesWaves):
+			if self.verb: print 'Vectorising branch:', branch, '...', ; sys.stdout.flush()
+			temp = self.treeRaw.GetVal(pos)
+			self.dicBraVectWaves[branch] = np.array([[temp[ev * self.ptsWave + pt] for pt in xrange(self.ptsWave)] for ev in xrange(self.events)], dtype=np.dtype(self.branchesWavesType[branch]))
+			if self.verb: print 'Done'
+
+	def ExplicitVectorsFromDictionary(self):
+		if self.hasBranch['voltageSignal']:
+			self.signalWaveVect = self.dicBraVectWaves['voltageSignal']
+		if self.hasBranch['voltageTrigger']:
+			self.triggerWaveVect = self.dicBraVectWaves['voltageTrigger']
+		if self.hasBranch['voltageVeto']:
+			self.vetoWaveVect = self.dicBraVectWaves['voltageVeto']
+		if self.hasBranch['time']:
+			self.timeVect = self.dicBraVectWaves['time']
+		if self.hasBranch['event']:
+			self.eventVect = self.dicBraVectWaves['event']
+		if self.hasBranch['vetoedEvent']:
+			self.vetoedEvent = self.dicBraVectWaves['vetoedEvent']
+		if self.hasBranch['badShape']:
+			self.badShape = self.dicBraVectWaves['badShape']
+		if self.hasBranch['badPedestal']:
+			self.badPedestal = self.dicBraVectWaves['badPedestal']
+		if self.hasBranch['voltageHV']:
+			self.voltageHV = self.dicBraVectWaves['voltageHV']
+		if self.hasBranch['currentHV']:
+			self.currentHV = self.dicBraVectWaves['currentHV']
+		if self.hasBranch['timeHV']:
+			key = 'timeHV.Convert()' if 'timeHV.Convert()' in self.branches1D else 'timeHV.AsDouble()'
+			self.timeHV = self.dicBraVectWaves[key]
+
+	def ExtractMeanOfWaveforms(self):
+		self.signalWaveMeanVect = self.signalWaveVect.mean(axis=0)
+		self.signalWaveSigmaVect = self.signalWaveVect.std(axis=0)
 
 	def ReadInputFile(self):
 		parser = ConfigParser()
@@ -285,15 +377,4 @@ class CCD_Caen:
 
 
 if __name__ == '__main__':
-	parser = OptionParser()
-	parser.add_option('-i', '--infile', dest='infile', default='', type='string', help='Input configuration file. e.g. CAENCalibration.cfg')
-	parser.add_option('-v', '--verbose', dest='verb', default=False, help='Toggles verbose', action='store_true')
-	(options, args) = parser.parse_args()
-	infile = str(options.infile)
-	verb = bool(options.verb)
-	ccd = CCD_Caen(infile, verb)
-	z.SetOutputFilesNames()
-	z.TakeTwoWaves()
-	print 'Finished :)'
-	sys.stdout.write('\a\a\a')
-	sys.stdout.flush()
+	print 'blaaaa'

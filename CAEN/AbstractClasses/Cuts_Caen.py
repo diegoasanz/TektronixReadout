@@ -16,7 +16,7 @@ import shutil
 # from DataAcquisition import DataAcquisition
 
 
-class CCD_Caen:
+class Cuts_Caen:
 	def __init__(self, infile='None', outdir='None', filename='cal', sig=-1, trig=-1, meas=100, calv=False, atten=0.0, bias=0.05024, verb=False):
 		self.infile = infile
 		self.bias = np.double(bias * 10.0 ** (-self.atten/20.0))
@@ -285,15 +285,4 @@ class CCD_Caen:
 
 
 if __name__ == '__main__':
-	parser = OptionParser()
-	parser.add_option('-i', '--infile', dest='infile', default='', type='string', help='Input configuration file. e.g. CAENCalibration.cfg')
-	parser.add_option('-v', '--verbose', dest='verb', default=False, help='Toggles verbose', action='store_true')
-	(options, args) = parser.parse_args()
-	infile = str(options.infile)
-	verb = bool(options.verb)
-	ccd = CCD_Caen(infile, verb)
-	z.SetOutputFilesNames()
-	z.TakeTwoWaves()
-	print 'Finished :)'
-	sys.stdout.write('\a\a\a')
-	sys.stdout.flush()
+	print 'blaaa'
