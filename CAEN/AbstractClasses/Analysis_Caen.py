@@ -75,19 +75,6 @@ class CCD_Analysis:
 
 		self.utils = Utils()
 
-	def Reset_Braches_Lists_And_Dictionaries(self):
-		self.branches1DTotal = ['event', 'vetoedEvent', 'badShape', 'badPedestal', 'voltageHV', 'currentHV', 'timeHV', 'peakPosition', 'pedestal', 'pedestalSigma', 'signalAndPedestal', 'signalAndPedestalSigma', 'signal']
-		self.branches1DType = {'event': 'uint32', 'vetoedEvent': 'bool', 'badShape': 'int8', 'badPedestal': 'bool', 'voltageHV': 'float32', 'currentHV': 'float32', 'timeHV': 'float64', 'peakPosition': 'float32', 'pedestal': 'float32', 'pedestalSigma': 'float32', 'signalAndPedestal': 'float32', 'signalAndPedestalSigma': 'float32', 'signal': 'float32'}
-		self.branchesWavesTotal = ['time', 'voltageSignal', 'voltageTrigger', 'voltageVeto']
-		self.branchesWavesType = {'time': 'float64', 'voltageSignal': 'float64', 'voltageTrigger': 'float64', 'voltageVeto': 'float64'}
-		self.branchesAll = self.branches1DTotal + self.branchesWavesTotal
-		self.branches1DLoad = ['event', 'voltageHV', 'currentHV', 'timeHV', 'peakPosition']
-		self.branchesWavesLoad = ['time', 'voltageSignal']
-		self.analysisScalarsBranches = ['pedestal', 'pedestalSigma', 'signalAndPedestal', 'signalAndPedestalSigma', 'signal']
-		self.dicBraVect1D = OrderedDict()
-		self.dicBraVectWaves = OrderedDict()
-		self.hasBranch = {}
-
 	def Load_Config_File(self):
 		parser = ConfigParser()
 		if os.path.isfile(self.config):
@@ -127,22 +114,34 @@ class CCD_Analysis:
 				if parser.has_option('CUTS', 'current_cut'):
 					self.currentCut = parser.getfloat('CUTS', 'current_cut') * 1e-9
 
-	def CreateCut0(self):
-		if self.cut0.GetTitle() != '':
-			self.cut0.SetTitle('')
-		if self.doBadPedestalCut and 'badPedestal' in self.branches1DTotal:
-			self.cut0 += ro.TCut('badPedCut', 'badPedestal==0')
-		if self.doVetoedEventCut and 'vetoedEvent' in self.branches1DTotal:
-			self.cut0 += ro.TCut('vetoedEventCut', 'vetoedEvent==0')
-		if self.badShapeCut == 1 and 'badShape' in self.branches1DTotal:
-			self.cut0 += ro.TCut('badShapeCut', 'badShape!=1')
-		elif self.badShapeCut == 2 and 'badShape' in self.branches1DTotal:
-			self.cut0 += ro.TCut('badShapeCut', 'badShape==0')
-		if 'currentHV' in self.branches1DTotal:
-			self.cut0 += ro.TCut('currentCut', 'abs(currentHV)<{cc}'.format(cc=self.currentCut))
-
-	def AddPeakPositionCut(self):
-		self.cut0 += ro.TCut('peakPosCut', 'abs(peakPosition-{pp})<={ppc}'.format(pp=self.peakTime, ppc=self.peakPosCut))
+	def AnalysisWaves(self, doCuts0=True):
+		self.OpenROOTFile('UPDATE')
+		self.LoadTree()
+		if doCuts0: self.CreateCut0()
+		if not self.hasBranch['peakPosition']:
+			self.LoadVectorsFromTree()
+			self.ExplicitVectorsFromDictionary()
+			if self.doPeakPos:
+				self.FindRealPeakPosition()
+			else:
+				self.peak_positions = np.full(self.peakTime)
+			self.FillTreePeakPositions()
+			self.CloseROOTFile()
+			self.OpenROOTFile('UPDATE')
+			self.Reset_Braches_Lists_And_Dictionaries()
+			self.LoadTree()
+		self.AddPeakPositionCut()
+		if not np.array([self.hasBranch[key0] for key0 in self.analysisScalarsBranches]).all():
+			self.LoadVectorsFromTree()
+			self.ExplicitVectorsFromDictionary()
+			self.FindPedestalPosition()
+			self.FindSignalPositions(self.peakBackward, self.peakForward)
+			self.CalculatePedestalsAndSignals()
+			self.FillPedestalsAndSignals()
+			self.CloseROOTFile()
+		self.OpenROOTFile('READ')
+		self.Reset_Braches_Lists_And_Dictionaries()
+		self.LoadTree()
 
 	def OpenROOTFile(self, mode='READ'):
 		if not os.path.isdir(self.outDir):
@@ -170,6 +169,12 @@ class CCD_Analysis:
 		self.hasBranch = {branch: self.TreeHasBranch(branch) for branch in self.branchesAll}
 		self.UpdateBranchesLists()
 		self.IsTimeHVaTimeStamp()
+
+	def TreeHasBranch(self, branch):
+		if self.treeRaw.GetLeaf(branch):
+			return True
+		else:
+			return False
 
 	def UpdateBranchesLists(self):
 		for branch in self.branches1DTotal[:]:
@@ -201,11 +206,19 @@ class CCD_Analysis:
 				self.branches1DType['timeHV.Convert()'] = 'uint32'
 				# self.branches1DType = {'event': 'uint32', 'vetoedEvent': 'bool', 'badShape': 'int8', 'badPedestal': 'bool', 'voltageHV': 'float32', 'currentHV': 'float32', 'timeHV.Convert()': 'uint32', 'peakPosition': 'float64'}
 
-	def TreeHasBranch(self, branch):
-		if self.treeRaw.GetLeaf(branch):
-			return True
-		else:
-			return False
+	def CreateCut0(self):
+		if self.cut0.GetTitle() != '':
+			self.cut0.SetTitle('')
+		if self.doBadPedestalCut and 'badPedestal' in self.branches1DTotal:
+			self.cut0 += ro.TCut('badPedCut', 'badPedestal==0')
+		if self.doVetoedEventCut and 'vetoedEvent' in self.branches1DTotal:
+			self.cut0 += ro.TCut('vetoedEventCut', 'vetoedEvent==0')
+		if self.badShapeCut == 1 and 'badShape' in self.branches1DTotal:
+			self.cut0 += ro.TCut('badShapeCut', 'badShape!=1')
+		elif self.badShapeCut == 2 and 'badShape' in self.branches1DTotal:
+			self.cut0 += ro.TCut('badShapeCut', 'badShape==0')
+		if 'currentHV' in self.branches1DTotal:
+			self.cut0 += ro.TCut('currentCut', 'abs(currentHV)<{cc}'.format(cc=self.currentCut))
 
 	def LoadVectorsFromTree(self):
 		self.max_events = self.treeRaw.GetEntries() if self.max_events == 0 else self.max_events
@@ -265,39 +278,15 @@ class CCD_Analysis:
 		if self.hasBranch['peakPosition']:
 			self.peak_positions = self.dicBraVect1D['peakPosition']
 
-	def ExtractMeanOfWaveforms(self):
-		self.signalWaveMeanVect = self.signalWaveVect.mean(axis=0)
-		self.signalWaveSigmaVect = self.signalWaveVect.std(axis=0)
-
-	def AnalysisWaves(self, doCuts0=True):
-		self.OpenROOTFile('UPDATE')
-		self.LoadTree()
-		if doCuts0: self.CreateCut0()
-		if not self.hasBranch['peakPosition']:
-			self.LoadVectorsFromTree()
-			self.ExplicitVectorsFromDictionary()
-			if self.doPeakPos:
-				self.FindRealPeakPosition()
-			else:
-				self.peak_positions = np.full(self.peakTime)
-			self.FillTreePeakPositions()
-			self.CloseROOTFile()
-			self.OpenROOTFile('UPDATE')
-			self.Reset_Braches_Lists_And_Dictionaries()
-			self.LoadTree()
-		self.AddPeakPositionCut()
-		if not np.array([self.hasBranch[key0] for key0 in self.analysisScalarsBranches]).all():
-			self.LoadVectorsFromTree()
-			self.ExplicitVectorsFromDictionary()
-			self.FindPedestalPosition()
-			self.FindSignalPositions(self.peakBackward, self.peakForward)
-			self.CalculatePedestalsAndSignals()
-			self.FillPedestalsAndSignals()
-			self.CloseROOTFile()
-		self.OpenROOTFile('READ')
-		self.Reset_Braches_Lists_And_Dictionaries()
-		self.LoadTree()
-		# self.ExtractMeanOfWaveforms()
+	def FindRealPeakPosition(self):
+		print 'Getting real peak positions...', ;sys.stdout.flush()
+		mpos = self.signalWaveVect.argmin(axis=1) if self.bias >= 0 else self.signalWaveVect.argmax(axis=1)
+		time_mpos = self.timeVect[:, mpos].diagonal()
+		xmin, xmax = time_mpos - self.pedestalIntegrationTime / 2.0, time_mpos + self.pedestalIntegrationTime / 2.0
+		fit = [ro.TGraph(len(timei), timei, self.signalWaveVect[it]).Fit('pol2', 'QMN0FS', '', xmin[it], xmax[it]) for it, timei in enumerate(self.timeVect)]
+		b, a = np.array([fiti.Parameter(1) for fiti in fit]), np.array([fiti.Parameter(2) for fiti in fit])
+		self.peak_positions = np.divide(-b, 2 * a)
+		print 'Done'
 
 	def FillTreePeakPositions(self):
 		print 'Filling tree with peak positions...'
@@ -319,19 +308,25 @@ class CCD_Analysis:
 		self.treeRaw.Write()
 		self.utils.bar.finish()
 
-	def FindRealPeakPosition(self):
-		print 'Getting real peak positions...', ;sys.stdout.flush()
-		mpos = self.signalWaveVect.argmin(axis=1) if self.bias >= 0 else self.signalWaveVect.argmax(axis=1)
-		time_mpos = self.timeVect[:, mpos].diagonal()
-		xmin, xmax = time_mpos - self.pedestalIntegrationTime / 2.0, time_mpos + self.pedestalIntegrationTime / 2.0
-		fit = [ro.TGraph(len(timei), timei, self.signalWaveVect[it]).Fit('pol2', 'QMN0FS', '', xmin[it], xmax[it]) for it, timei in enumerate(self.timeVect)]
-		b, a = np.array([fiti.Parameter(1) for fiti in fit]), np.array([fiti.Parameter(2) for fiti in fit])
-		self.peak_positions = np.divide(-b, 2 * a)
-		print 'Done'
-
 	def CloseROOTFile(self):
 		self.treeRaw.Delete()
 		self.fileRaw.Close()
+
+	def Reset_Braches_Lists_And_Dictionaries(self):
+		self.branches1DTotal = ['event', 'vetoedEvent', 'badShape', 'badPedestal', 'voltageHV', 'currentHV', 'timeHV', 'peakPosition', 'pedestal', 'pedestalSigma', 'signalAndPedestal', 'signalAndPedestalSigma', 'signal']
+		self.branches1DType = {'event': 'uint32', 'vetoedEvent': 'bool', 'badShape': 'int8', 'badPedestal': 'bool', 'voltageHV': 'float32', 'currentHV': 'float32', 'timeHV': 'float64', 'peakPosition': 'float32', 'pedestal': 'float32', 'pedestalSigma': 'float32', 'signalAndPedestal': 'float32', 'signalAndPedestalSigma': 'float32', 'signal': 'float32'}
+		self.branchesWavesTotal = ['time', 'voltageSignal', 'voltageTrigger', 'voltageVeto']
+		self.branchesWavesType = {'time': 'float64', 'voltageSignal': 'float64', 'voltageTrigger': 'float64', 'voltageVeto': 'float64'}
+		self.branchesAll = self.branches1DTotal + self.branchesWavesTotal
+		self.branches1DLoad = ['event', 'voltageHV', 'currentHV', 'timeHV', 'peakPosition']
+		self.branchesWavesLoad = ['time', 'voltageSignal']
+		self.analysisScalarsBranches = ['pedestal', 'pedestalSigma', 'signalAndPedestal', 'signalAndPedestalSigma', 'signal']
+		self.dicBraVect1D = OrderedDict()
+		self.dicBraVectWaves = OrderedDict()
+		self.hasBranch = {}
+
+	def AddPeakPositionCut(self):
+		self.cut0 += ro.TCut('peakPosCut', 'abs(peakPosition-{pp})<={ppc}'.format(pp=self.peakTime, ppc=self.peakPosCut))
 
 	def FindPedestalPosition(self):
 		print 'Calculating position of pedestals...', ;sys.stdout.flush()
@@ -388,6 +383,10 @@ class CCD_Analysis:
 			self.utils.bar.update(ev + 1)
 		self.treeRaw.Write()
 		self.utils.bar.finish()
+
+	def ExtractMeanOfWaveforms(self):
+		self.signalWaveMeanVect = self.signalWaveVect.mean(axis=0)
+		self.signalWaveSigmaVect = self.signalWaveVect.std(axis=0)
 
 if __name__ == '__main__':
 	print 'blaaaa'
