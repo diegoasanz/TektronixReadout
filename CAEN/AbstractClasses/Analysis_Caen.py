@@ -21,7 +21,6 @@ from collections import OrderedDict
 class CCD_Analysis:
 	def __init__(self, config='CAENAnalysisConfig.cfg', infile='', bias=0.0, verbose=False):
 		self.config, self.outDir, self.inputFile, self.bias, self.verb = config, '/'.join(infile.split('/')[:-1]), infile.split('/')[-1], bias, verbose
-
 		self.treeName = '.'.join(self.inputFile.split('.')[:-1])
 		self.fileRaw, self.treeRaw = None, None
 		self.ptsWave, self.event, self.events, self.max_events = 0, np.zeros(1, 'I'), 0, 0
@@ -388,8 +387,39 @@ class CCD_Analysis:
 		self.signalWaveMeanVect = self.signalWaveVect.mean(axis=0)
 		self.signalWaveSigmaVect = self.signalWaveVect.std(axis=0)
 
+	def ResetTreeToOriginal(self, keepBranches=['event','time','voltageSignal','voltageTrigger','voltageVeto','vetoedEvent','badShape','badPedestal','voltageHV','currentHV','timeHV']):
+		print 'Restoring tree with the following branches:', keepBranches, '...'
+		raw_input('Press a key and Enter to continue: ')
+		self.OpenROOTFile('READ')
+		self.LoadTree()
+		self.treeRaw.SetBranchStatus('*', 0)
+		for branch in keepBranches:
+			if self.TreeHasBranch(branch):
+				self.treeRaw.SetBranchStatus(branch, 1)
+		newFile = ro.TFile('{o}/temp.root'.format(o=self.outDir), 'recreate')
+		newTree = self.treeRaw.CloneTree()
+		newTree.Print()
+		newFile.Write()
+		del self.fileRaw
+		del newFile
+		self.fileRaw = None
+		checkFile = ro.TFile('{o}/temp.root'.format(o=self.outDir), 'READ')
+		checkTree = checkFile.Get(self.treeName)
+		doMoveFile = True
+		if checkTree:
+			for branch in keepBranches:
+				if not checkTree.GetLeaf(branch):
+					doMoveFile = False
+					break
+			if doMoveFile:
+				print 'The file was cloned successfully :)'
+				checkFile.Close()
+				del checkFile
+				shutil.move('{o}/temp.root'.format(o=self.outDir), '{o}/{f}'.format(o=self.outDir, f=self.inputFile))
+				return
+		print 'The file was not cloned successfully :S. Check original tree and "temp.root"'
+
 if __name__ == '__main__':
-	print 'blaaaa'
 
 	parser = OptionParser()
 	parser.add_option('-c', '--configFile', dest='config', default='CAENAnalysisConfig.cfg', type='string', help='Path to file containing Analysis configuration file')
