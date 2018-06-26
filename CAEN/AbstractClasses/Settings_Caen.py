@@ -23,6 +23,7 @@ class Settings_Caen:
 		self.optlink = 1
 		self.node = 0
 		self.vme_b_addr = 32100000
+		self.wavedump_path = '/usr/local/bin'
 		self.dig_bits = 14
 		self.points = 2560
 		self.post_trig_percent = 90
@@ -84,6 +85,8 @@ class Settings_Caen:
 						self.node = parser.getint('OPTILINK', 'node')
 					if parser.has_option('OPTILINK', 'vme_base_address'):
 						self.vme_b_addr = parser.getint('OPTILINK', 'vme_base_address')
+					if parser.has_option('OPTILINK', 'wavedump_path'):
+						self.wavedump_path = parser.get('OPTILINK', 'wavedump_path')
 
 				if parser.has_section('RUN'):
 					if parser.has_option('RUN', 'time'):

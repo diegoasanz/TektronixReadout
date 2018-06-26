@@ -53,6 +53,7 @@ class Channel_Caen:
 				self.dc_offset_percent = -50
 			else:
 				self.dc_offset_percent = int(round(100 * (limit/float(2**settings.dig_bits - 1) - 0.5)))
+				self.dc_offset_percent = 48 if self.dc_offset_percent > 48 else -48 if self.dc_offset_percent < -48 else self.dc_offset_percent
 
 	def Calculate_Universal_ADCs(self, value_volts, sig_res):
 		return np.divide(value_volts, sig_res, dtype='f8')
@@ -70,6 +71,7 @@ class Channel_Caen:
 			self.dc_offset_percent += int(round(100.0 * (variable + 1 - 2.0**settings.dig_bits) / (2.0**settings.dig_bits - 1.0)))
 		else:
 			self.dc_offset_percent = -50
+		self.dc_offset_percent = 48 if self.dc_offset_percent > 48 else -48 if self.dc_offset_percent < -48 else self.dc_offset_percent
 
 	def Correct_Threshold(self, sigma):
 		if self.type == 'trigger':

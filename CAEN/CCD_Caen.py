@@ -73,7 +73,7 @@ class CCD_Caen:
 
 	def GetBaseLines(self):
 		self.settings.SetupDigitiser(doBaseLines=True, signal=self.signal, trigger=self.trigger, ac=self.anti_co)
-		self.p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD_BL.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE, close_fds=True)
+		self.p = subp.Popen(['{p}/wavedump'.format(p=self.settings.wavedump_path), '{d}/WaveDumpConfig_CCD_BL.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE, close_fds=True)
 		t0 = time.time()
 		self.CreateEmptyFiles()
 		self.GetWaveforms(events=1, stdin=True, stdout=False)
@@ -461,7 +461,7 @@ class CCD_Caen:
 			if self.settings.ac_enable:
 				self.aco_written = self.CalculateEventsWritten(self.anti_co.ch)
 			# p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE, close_fds=True)
-			self.p = subp.Popen(['wavedump', '{d}/WaveDumpConfig_CCD.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE, stdout=subp.PIPE, close_fds=True)
+			self.p = subp.Popen(['{p}/wavedump'.format(p=self.settings.wavedump_path), '{d}/WaveDumpConfig_CCD.txt'.format(d=self.settings.outdir)], bufsize=-1, stdin=subp.PIPE, stdout=subp.PIPE, close_fds=True)
 			self.GetWaveforms(self.settings.num_events, stdin=True, stdout=True)
 			# if time.time() - self.t0 >= 165:
 			# 	self.total_events = self.settings.num_events

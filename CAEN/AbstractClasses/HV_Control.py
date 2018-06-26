@@ -66,7 +66,7 @@ class HV_Control:
 	def CreateHVClientConfig(self):
 		num_supplies = 7
 		supplies_num = range(1, num_supplies + 1)
-		supplies_ids = {1: 'Keithley1', 2: 'Keithley2', 3: 'Keithley237', 4: 'Keithley6517', 5: '', 6: 'Keithley2657A', 7: 'ISEG-NHS-6220x'}
+		supplies_ids = {1: 'Keithley1', 2: 'Keithley2', 3: 'Keithley237', 4: 'Keithley6517', 5: '', 6: 'Keithley2657A', 7: 'ISEG-NHS-6220x'} if self.hv_supply == 'ISEG-NHS-6220x' else {1: 'Keithley1', 2: 'Keithley2', 3: 'Keithley237', 4: 'Keithley6517', 5: '', 6: 'Keithley2657A', 7: 'ISEG-NHS-6220n'}
 		conf_file = open('config/hv_{f}.cfg'.format(f=self.filename), 'w')
 
 		conf_file.write('[Main]\n')
@@ -75,32 +75,50 @@ class HV_Control:
 
 		conf_file.write('\n[Names]\n')
 		for s in supplies_num:
-			if supplies_ids[s] == self.hv_supply:
+			if s == 7:			
+			# if supplies_ids[s] == self.hv_supply:
 				conf_file.write('CH{s}: {d}\n'.format(s=s, d=self.dut))
 			else:
 				conf_file.write('CH{s}: None\n'.format(s=s))
 
 		for s in supplies_num:
 			if supplies_ids[s] == self.hv_supply:
-				if self.hv_supply == 'ISEG-NHS-6220x':
-					self.supply_number = s
-					conf_file.write('\n[HV{s}]\n'.format(s=s))
+				if self.hv_supply == 'ISEG-NHS-6220x' or self.hv_supply == 'ISEG-NHS-6220n':
+					self.supply_number = 7 # s
+					conf_file.write('\n[HV{s}]\n'.format(s=self.supply_number))
 					conf_file.write('name: {n}\n'.format(n=supplies_ids[s]))
 					conf_file.write('model: NHS-6220x\n')
 					conf_file.write('module_name: ISEG\n')
 					conf_file.write('nChannels: 6\n')
 					conf_file.write('active_channels: [{ch}]\n'.format(ch=self.ch))
-					conf_file.write('address: /dev/iseg\n')
+					if self.hv_supply == 'ISEG-NHS-6220x':
+						conf_file.write('address: /dev/iseg\n')
+					else:
+						conf_file.write('address: /dev/iseg2\n')
 					conf_file.write('# in V/s\n')
 					conf_file.write('ramp: {r}\n'.format(r=self.ramp))
 					conf_file.write('config_file: iseg.cfg\n')
+				elif self.hv_supply == 'Keithley2':
+					self.supply_number = 7 # s
+					conf_file.write('\n[HV{s}]\n'.format(s=self.supply_number))
+					conf_file.write('name: {n}\n'.format(n=supplies_ids[s]))
+					conf_file.write('model: 2410\n')
+					conf_file.write('address: /dev/keithley4\n')
+					conf_file.write('compliance: {c} nA\n'.format(c=self.current_limit*1e9))
+					conf_file.write('ramp: {r}\n'.format(r=self.ramp))
+					conf_file.write('max_step: 10\n')
+					conf_file.write('bias: 0\n')
+					conf_file.write('min_bias: -1000\n')
+					conf_file.write('max_bias: 1000\n')
+					conf_file.write('baudrate: 57600\n')
+					conf_file.write('output: front\n')
 			# TODO: write the other cases for the other supplies
 
 		conf_file.close()
 		self.UnlinkConfigFile('keithley.cfg')
 		os.symlink('hv_{f}.cfg'.format(f=self.filename), 'config/keithley.cfg')
 
-		if self.hv_supply == 'ISEG-NHS-6220x':
+		if self.hv_supply == 'ISEG-NHS-6220x' or self.hv_supply == 'ISEG-NHS-6220n':
 			self.CreateIsegConfigFile()
 
 	def CreateIsegConfigFile(self):
@@ -170,7 +188,10 @@ class HV_Control:
 		return
 
 	def CorrectBias(self, delta_volts):
-		self.process.stdin.write('BIAS HV{s} CH{c} {v}\n'.format(s=self.supply_number, c=self.ch, v=self.bias))
+		if self.hv_supply.startswith('ISE'):
+			self.process.stdin.write('BIAS HV{s} CH{c} {v}\n'.format(s=self.supply_number, c=self.ch, v=self.bias))
+		else:
+			self.process.stdin.write('BIAS HV{s} {v}\n'.format(s=self.supply_number, v=self.bias))
 		self.process.stdin.flush()
 		wait_time = delta_volts/float(self.ramp) + 5
 		time.sleep(wait_time)
